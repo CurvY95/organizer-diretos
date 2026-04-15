@@ -25,6 +25,7 @@ REQUIRED_PRICES_COLS = ["Produto", "Preco"]
 ORDERS_ALIASES = {
     "Cliente": ["Cliente", "Nome", "NOME", "cliente", "name"],
     "UserId": ["UserId", "UserID", "user_id", "USER_ID", "User ID", "ID", "id", "PSID", "psid"],
+    "ProfileId": ["ProfileId", "ProfileID", "profile_id", "PROFILE_ID", "Profile ID", "Username", "username", "user_name"],
     "Produto": ["Produto", "Referência", "Referencia", "Referência ", "Ref", "REF", "produto", "ref"],
     "Quantidade": ["Quantidade", "Qtd", "QTD", "quantidade", "qtd"],
 }
@@ -189,8 +190,13 @@ def parse_inputs(
     _validate_required_cols(orders_df, REQUIRED_ORDERS_COLS, "Encomendas")
     _validate_required_cols(prices_df, REQUIRED_PRICES_COLS, "Preços")
 
-    # Keep optional columns (e.g. UserId) for UI/actions, but enforce required subset.
-    keep_cols = REQUIRED_ORDERS_COLS + (["UserId"] if "UserId" in orders_df.columns else [])
+    # Keep optional columns (e.g. UserId/ProfileId) for UI/actions, but enforce required subset.
+    keep_cols = REQUIRED_ORDERS_COLS.copy()
+    if "UserId" in orders_df.columns:
+        keep_cols.append("UserId")
+    if "ProfileId" in orders_df.columns:
+        keep_cols.append("ProfileId")
+
     orders = orders_df[keep_cols].copy()
     prices = prices_df[REQUIRED_PRICES_COLS].copy()
 
@@ -198,6 +204,8 @@ def parse_inputs(
     orders["Produto"] = orders["Produto"].astype(str).str.strip()
     if "UserId" in orders.columns:
         orders["UserId"] = orders["UserId"].astype(str).str.strip()
+    if "ProfileId" in orders.columns:
+        orders["ProfileId"] = orders["ProfileId"].astype(str).str.strip()
     prices["Produto"] = prices["Produto"].astype(str).str.strip()
 
     orders["Quantidade"] = _coerce_number_series(orders["Quantidade"])
@@ -352,6 +360,20 @@ def template_version(intro: str, total_line_template: str, outro: str) -> str:
 
 SESSIONS_DIR = os.path.join(os.getcwd(), "saved", "sessions")
 FB_PAGE_ID = "106851297526135"
+
+
+def build_facebook_chat_url(user_id: str = "", profile_id: str = "") -> str:
+    user_id = str(user_id or "").strip()
+    profile_id = str(profile_id or "").strip()
+
+    target = user_id or profile_id
+    if not target:
+        return ""
+
+    return (
+        f"https://business.facebook.com/latest/inbox/all?asset_id={FB_PAGE_ID}"
+        f"&selected_item_id={target}&thread_type=FB_MESSAGE"
+    )
 
 
 def require_login() -> None:
@@ -642,10 +664,19 @@ if orders_df is not None and prices_df is not None:
             ui_cols = ["Cliente"]
             if "UserId" in orders_edit.columns:
                 ui_cols.append("UserId")
+            if "ProfileId" in orders_edit.columns:
+                ui_cols.append("ProfileId")
             ui_cols += ["Produto", "Quantidade"]
+
             orders_edit = orders_edit[ui_cols].copy()
             orders_edit = orders_edit.rename(
-                columns={"Cliente": "Cliente", "UserId": "User ID", "Produto": "Referência", "Quantidade": "Quantidade"}
+                columns={
+                    "Cliente": "Cliente",
+                    "UserId": "User ID",
+                    "ProfileId": "Profile ID",
+                    "Produto": "Referência",
+                    "Quantidade": "Quantidade",
+                }
             )
             # Force numeric dtype so the editor allows changing values reliably
             orders_edit["Quantidade"] = _coerce_number_series(orders_edit["Quantidade"])
@@ -660,6 +691,9 @@ if orders_df is not None and prices_df is not None:
             if "User ID" in orders_edit.columns:
                 col_cfg["User ID"] = st.column_config.TextColumn("User ID", disabled=True)
 
+            if "Profile ID" in orders_edit.columns:
+                col_cfg["Profile ID"] = st.column_config.TextColumn("Profile ID", disabled=True)
+
             edited_orders = st.data_editor(
                 orders_edit,
                 use_container_width=True,
@@ -671,7 +705,13 @@ if orders_df is not None and prices_df is not None:
             )
 
             # Convert back to expected input shape
-            orders_for_calc = edited_orders.rename(columns={"Referência": "Produto", "User ID": "UserId"}).copy()
+            orders_for_calc = edited_orders.rename(
+                columns={
+                    "Referência": "Produto",
+                    "User ID": "UserId",
+                    "Profile ID": "ProfileId",
+                }
+            ).copy()
 
             st.divider()
             st.subheader("Guardar sessão")
@@ -785,15 +825,41 @@ if orders_df is not None and prices_df is not None:
             )
 
         by_client, details = build_summary(merged.dropna(subset=["Preco"]))
-        # Map Cliente -> UserId (if present)
-        client_userid_map: dict[str, str] = {}
+        client_ids_map: dict[str, dict[str, str]] = {}
+
+        tmp_cols = ["Cliente"]
         if "UserId" in parsed.orders.columns:
-            tmp = parsed.orders[["Cliente", "UserId"]].copy()
-            tmp["Cliente"] = tmp["Cliente"].astype(str)
-            tmp["UserId"] = tmp["UserId"].astype(str)
-            tmp = tmp[(tmp["UserId"].str.strip() != "") & (tmp["UserId"].str.lower() != "nan")]
-            for _, r in tmp.drop_duplicates(subset=["Cliente"]).iterrows():
-                client_userid_map[str(r["Cliente"])] = str(r["UserId"]).strip()
+            tmp_cols.append("UserId")
+        if "ProfileId" in parsed.orders.columns:
+            tmp_cols.append("ProfileId")
+
+        tmp = parsed.orders[tmp_cols].copy()
+        tmp["Cliente"] = tmp["Cliente"].astype(str)
+
+        if "UserId" in tmp.columns:
+            tmp["UserId"] = tmp["UserId"].astype(str).str.strip()
+        else:
+            tmp["UserId"] = ""
+
+        if "ProfileId" in tmp.columns:
+            tmp["ProfileId"] = tmp["ProfileId"].astype(str).str.strip()
+        else:
+            tmp["ProfileId"] = ""
+
+        for _, r in tmp.drop_duplicates(subset=["Cliente"]).iterrows():
+            cliente = str(r["Cliente"]).strip()
+            user_id = str(r["UserId"]).strip()
+            profile_id = str(r["ProfileId"]).strip()
+
+            if user_id.lower() == "nan":
+                user_id = ""
+            if profile_id.lower() == "nan":
+                profile_id = ""
+
+            client_ids_map[cliente] = {
+                "user_id": user_id,
+                "profile_id": profile_id,
+            }
 
         with tab_summary:
             st.subheader("Resumo")
@@ -839,13 +905,10 @@ if orders_df is not None and prices_df is not None:
                         intro=intro,
                         outro=outro,
                     )
-                    user_id = client_userid_map.get(client, "")
-                    chat_url = (
-                        f"https://business.facebook.com/latest/inbox/all?asset_id={FB_PAGE_ID}"
-                        f"&selected_item_id={user_id}&thread_type=FB_MESSAGE"
-                        if user_id
-                        else ""
-                    )
+                    ids = client_ids_map.get(client, {})
+                    user_id = ids.get("user_id", "")
+                    profile_id = ids.get("profile_id", "")
+                    chat_url = build_facebook_chat_url(user_id=user_id, profile_id=profile_id)
 
                     st.markdown("<div class='od-muted' style='margin-top:8px'><b>Ações</b></div>", unsafe_allow_html=True)
                     a1, a2, a3, a4 = st.columns([1.2, 1.1, 1.5, 2.2])
@@ -922,10 +985,14 @@ if orders_df is not None and prices_df is not None:
                             height=90,
                         )
                     with a4:
-                        if user_id:
+                        if user_id and profile_id:
+                            st.caption(f"User ID: `{user_id}` | Profile ID: `{profile_id}`")
+                        elif user_id:
                             st.caption(f"User ID: `{user_id}`")
+                        elif profile_id:
+                            st.caption(f"Profile ID: `{profile_id}`")
                         else:
-                            st.caption("User ID: —")
+                            st.caption("User/Profile ID: —")
 
                     msg_line = (total_line_template or "").replace("{total}", format_currency(client_total, currency))
                     if msg_line.strip():
@@ -1039,8 +1106,17 @@ if orders_df is not None and prices_df is not None:
             cols_out = ["Cliente"]
             if "UserId" in export_df.columns:
                 cols_out.append("UserId")
+            if "ProfileId" in export_df.columns:
+                cols_out.append("ProfileId")
             cols_out += ["Produto", "Quantidade"]
-            export_df = export_df[cols_out].rename(columns={"UserId": "user_id", "Produto": "referencia", "Quantidade": "quantidade"})
+            export_df = export_df[cols_out].rename(
+                columns={
+                    "UserId": "user_id",
+                    "ProfileId": "profile_id",
+                    "Produto": "referencia",
+                    "Quantidade": "quantidade",
+                }
+            )
             st.download_button(
                 "Download encomendas (.csv)",
                 data=export_df.to_csv(index=False).encode("utf-8"),
