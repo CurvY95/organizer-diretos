@@ -363,8 +363,14 @@ FB_PAGE_ID = "106851297526135"
 
 
 def build_facebook_chat_url(user_id: str = "", profile_id: str = "") -> str:
-    user_id = str(user_id or "").strip()
-    profile_id = str(profile_id or "").strip()
+    def normalize_target(v: str) -> str:
+        s = str(v or "").strip()
+        # Some CSV/Excel imports turn large numeric IDs into floats like "100023...332.0"
+        s = re.sub(r"^(\d{5,})\.0$", r"\1", s)
+        return s
+
+    user_id = normalize_target(user_id)
+    profile_id = normalize_target(profile_id)
 
     # Prefer numeric IDs (UserID) over usernames (ProfileID).
     def is_numeric_id(v: str) -> bool:
