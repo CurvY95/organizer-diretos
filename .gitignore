@@ -1,0 +1,26 @@
+.venv/
+venv/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.cache/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# App local data (generated)
+saved/
+
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/
