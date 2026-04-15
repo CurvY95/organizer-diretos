@@ -24,7 +24,7 @@ REQUIRED_PRICES_COLS = ["Produto", "Preco"]
 
 ORDERS_ALIASES = {
     "Cliente": ["Cliente", "Nome", "NOME", "cliente", "name"],
-    "UserId": ["UserId", "user_id", "USER_ID", "User ID", "ID", "id", "PSID", "psid"],
+    "UserId": ["UserId", "UserID", "user_id", "USER_ID", "User ID", "ID", "id", "PSID", "psid"],
     "Produto": ["Produto", "Referência", "Referencia", "Referência ", "Ref", "REF", "produto", "ref"],
     "Quantidade": ["Quantidade", "Qtd", "QTD", "quantidade", "qtd"],
 }
