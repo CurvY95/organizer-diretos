@@ -35,8 +35,17 @@ PRICES_ALIASES = {
 }
 
 
-def _normalize_col_name(c: str) -> str:
-    c = (c or "").strip()
+def _normalize_col_name(c) -> str:
+    # Column names can arrive as float/NaN when reading some CSV/XLSX exports.
+    if c is None:
+        c = ""
+    try:
+        # pandas may use numpy.nan (float) for empty headers
+        if isinstance(c, float) and pd.isna(c):
+            c = ""
+    except Exception:
+        pass
+    c = str(c).strip()
     c = re.sub(r"\s+", " ", c)
     return c
 
