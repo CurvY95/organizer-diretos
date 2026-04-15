@@ -56,8 +56,15 @@ def _coerce_number_series(s: pd.Series) -> pd.Series:
     s2 = s.astype(str).str.strip()
     s2 = s2.str.replace("\u00a0", " ", regex=False)  # non-breaking space
 
-    def normalize_one(x: str) -> str:
-        x = (x or "").strip()
+    def normalize_one(x) -> str:
+        if x is None:
+            x = ""
+        try:
+            if isinstance(x, float) and pd.isna(x):
+                x = ""
+        except Exception:
+            pass
+        x = str(x).strip()
         if x == "":
             return ""
         x = x.replace(" ", "")
