@@ -947,9 +947,15 @@ if orders_df is not None and prices_df is not None:
                         )
                     with a2:
                         if chat_url:
-                            st.link_button("ABRIR CHAT", chat_url, use_container_width=True)
+                            st.link_button("ABRIR CHAT", chat_url, use_container_width=True, key=f"open_chat_{btn_key_base}")
                         else:
-                            st.button("ABRIR CHAT", disabled=True, use_container_width=True, help="Falta `UserId` no Excel.")
+                            st.button(
+                                "ABRIR CHAT",
+                                disabled=True,
+                                use_container_width=True,
+                                help="Falta `UserId` no Excel.",
+                                key=f"open_chat_disabled_{btn_key_base}",
+                            )
                     with a3:
                         st.components.v1.html(
                             f"""
