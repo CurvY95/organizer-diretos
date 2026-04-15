@@ -625,7 +625,14 @@ with tab_main:
             try:
                 name = (uploaded.name or "").lower()
                 if name.endswith(".csv"):
-                    orders_df = pd.read_csv(uploaded)
+                    # Tampermonkey export uses ';' delimiter and often includes UTF-8 BOM.
+                    raw = uploaded.getvalue()
+                    sample = raw[:4096].decode("utf-8-sig", errors="ignore")
+                    first_line = (sample.splitlines() or [""])[0]
+                    semicolons = first_line.count(";")
+                    commas = first_line.count(",")
+                    sep = ";" if semicolons > commas else ","
+                    orders_df = pd.read_csv(io.BytesIO(raw), sep=sep, encoding="utf-8-sig")
                     orders_source_label = f"CSV: {uploaded.name}"
                 else:
                     raw = uploaded.getvalue()
