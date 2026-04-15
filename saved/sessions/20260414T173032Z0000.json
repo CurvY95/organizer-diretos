@@ -1,0 +1,3793 @@
+{
+  "id": "20260414T173032Z0000",
+  "created_at": "2026-04-14T17:30:32+00:00",
+  "label": "encpomendas 14/04",
+  "meta": {
+    "source": "Excel: BACKUP EXCEL (5).xlsx / aba: Comments"
+  },
+  "orders_rows": 715,
+  "refs": 204,
+  "orders": [
+    {
+      "Cliente": "JoãoCarpinteiro IsabelCarpinteiro",
+      "Produto": "A3",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "JoãoCarpinteiro IsabelCarpinteiro",
+      "Produto": "A4",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Fernanda Rocha",
+      "Produto": "M101",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Leonorita Pereira",
+      "Produto": "M101",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "JoãoCarpinteiro IsabelCarpinteiro",
+      "Produto": "M101",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M101",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "M101",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Sónia Branco",
+      "Produto": "M101",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Silva",
+      "Produto": "M103",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Gina's Aldeias",
+      "Produto": "M103",
+      "Quantidade": 0.5
+    },
+    {
+      "Cliente": "JoãoCarpinteiro IsabelCarpinteiro",
+      "Produto": "M104",
+      "Quantidade": 2.5
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "M104",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Almerinda Calisto",
+      "Produto": "M104",
+      "Quantidade": 0.5
+    },
+    {
+      "Cliente": "Isabel Martins",
+      "Produto": "M105",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Gina's Aldeias",
+      "Produto": "M105",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M106",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Alexandra Pinto",
+      "Produto": "M106",
+      "Quantidade": 2.5
+    },
+    {
+      "Cliente": "Isabel Martins",
+      "Produto": "M109",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Carmo Moreira",
+      "Produto": "M109",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Queta Maga",
+      "Produto": "M111",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M111",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Margarida Marreiros",
+      "Produto": "M111",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M113",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Sónia Branco",
+      "Produto": "M113",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Leonorita Pereira",
+      "Produto": "M113",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M113",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Almerinda Calisto",
+      "Produto": "M116",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M116",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Gina's Aldeias",
+      "Produto": "M116",
+      "Quantidade": 0.5
+    },
+    {
+      "Cliente": "Leonorita Pereira",
+      "Produto": "M116",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Maria Santos",
+      "Produto": "M116",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "São Querido",
+      "Produto": "M116",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Coutinho Aldina",
+      "Produto": "M116",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Isabel Morais",
+      "Produto": "M117",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M117",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Aninha Santos",
+      "Produto": "M117",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M117",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Leonorita Pereira",
+      "Produto": "M117",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Marisa Pinho",
+      "Produto": "M117",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Dulce Maria",
+      "Produto": "M120",
+      "Quantidade": 4.0
+    },
+    {
+      "Cliente": "Teresa Tavares",
+      "Produto": "M120",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M120",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Fátima Silva",
+      "Produto": "M120",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Isabel Cruz",
+      "Produto": "M120",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Almerinda Calisto",
+      "Produto": "M120",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Inácia Pereira",
+      "Produto": "M200",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Inácia Pereira",
+      "Produto": "M204",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Margarida Marreiros",
+      "Produto": "M204",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M207",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Manuela Oliveira",
+      "Produto": "M207",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Sónia Branco",
+      "Produto": "M207",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cacilda Ribeiro",
+      "Produto": "M207",
+      "Quantidade": 0.8
+    },
+    {
+      "Cliente": "Dulce Maria",
+      "Produto": "M209",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Cláudia Fernandes",
+      "Produto": "M209",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Teresa Tavares",
+      "Produto": "M209",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "M209",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Isabel Cruz",
+      "Produto": "M209",
+      "Quantidade": 1.2
+    },
+    {
+      "Cliente": "Ana Paula Fróis",
+      "Produto": "M209",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "M213",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Queta Maga",
+      "Produto": "M213",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Isabel Martins",
+      "Produto": "M213",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Helena Rato Pereira",
+      "Produto": "M213",
+      "Quantidade": 2.5
+    },
+    {
+      "Cliente": "Maria Silva",
+      "Produto": "M213",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Gina's Aldeias",
+      "Produto": "M213",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Ana Batista",
+      "Produto": "M214",
+      "Quantidade": 4.0
+    },
+    {
+      "Cliente": "Aninha Santos",
+      "Produto": "M215",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M216",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "M220",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Conceição Monteiro",
+      "Produto": "M220",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Coutinho Aldina",
+      "Produto": "M220",
+      "Quantidade": 0.5
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M220",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Inácia Pereira",
+      "Produto": "M223",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Coutinho Aldina",
+      "Produto": "M224",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Brigite Paleta",
+      "Produto": "M227",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M227",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "M227",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Melo",
+      "Produto": "M227",
+      "Quantidade": 0.5
+    },
+    {
+      "Cliente": "Maria Conceição Silva",
+      "Produto": "M227",
+      "Quantidade": 0.5
+    },
+    {
+      "Cliente": "Gina's Aldeias",
+      "Produto": "M227",
+      "Quantidade": 0.5
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M228",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Teresa Martins",
+      "Produto": "M228",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M229",
+      "Quantidade": 2.5
+    },
+    {
+      "Cliente": "Carmo Moreira",
+      "Produto": "M230",
+      "Quantidade": 1.3
+    },
+    {
+      "Cliente": "Sónia Branco",
+      "Produto": "M230",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Gina's Aldeias",
+      "Produto": "M230",
+      "Quantidade": 0.5
+    },
+    {
+      "Cliente": "Isabel Martins",
+      "Produto": "M230",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Leonorita Pereira",
+      "Produto": "M230",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M231",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Graça Gonçalves",
+      "Produto": "M232",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M232",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Teresa Martins",
+      "Produto": "M232",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Isabel Cruz",
+      "Produto": "M232",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Sónia Branco",
+      "Produto": "M232",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "JoãoCarpinteiro IsabelCarpinteiro",
+      "Produto": "M232",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M234",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "M235",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "M235",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "M236",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Aninha Santos",
+      "Produto": "M236",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Manuela Fernandes",
+      "Produto": "M236",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M237",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria João Vinagre",
+      "Produto": "M237",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M243",
+      "Quantidade": 6.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M244",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Coutinho Aldina",
+      "Produto": "M244",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Goretti Oliveira",
+      "Produto": "M311",
+      "Quantidade": 2.5
+    },
+    {
+      "Cliente": "Vanesa Martins",
+      "Produto": "M311",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Mariana Morgado",
+      "Produto": "M311",
+      "Quantidade": 10.0
+    },
+    {
+      "Cliente": "Brigite Paleta",
+      "Produto": "M311",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Leonorita Pereira",
+      "Produto": "M311",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Gina's Aldeias",
+      "Produto": "M311",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "M311",
+      "Quantidade": 1.25
+    },
+    {
+      "Cliente": "Eni Marques",
+      "Produto": "M311",
+      "Quantidade": 4.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M311",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Maria Santos",
+      "Produto": "M311",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Helena Rato Pereira",
+      "Produto": "M313",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Rute Andrade",
+      "Produto": "M313",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Maria Silva",
+      "Produto": "M313",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Cacilda Ribeiro",
+      "Produto": "M313",
+      "Quantidade": 1.8
+    },
+    {
+      "Cliente": "Rute Andrade",
+      "Produto": "M313",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "M314",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Gina's Aldeias",
+      "Produto": "M314",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Marisa Pinho",
+      "Produto": "M315",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Aninha Santos",
+      "Produto": "M315",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Queta Maga",
+      "Produto": "M315",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Teresa Tavares",
+      "Produto": "M315",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Helena Rato Pereira",
+      "Produto": "M315",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Coutinho Aldina",
+      "Produto": "M315",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Graça Gonçalves",
+      "Produto": "M316",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M316",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "M316",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Dulce Maria",
+      "Produto": "M317",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M318",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Fernanda Rocha",
+      "Produto": "M318",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Brigite Paleta",
+      "Produto": "M318",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Gina's Aldeias",
+      "Produto": "M318",
+      "Quantidade": 0.5
+    },
+    {
+      "Cliente": "Ana Melo",
+      "Produto": "M318",
+      "Quantidade": 0.5
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "M319",
+      "Quantidade": 1.25
+    },
+    {
+      "Cliente": "Mariana Morgado",
+      "Produto": "M319",
+      "Quantidade": 10.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M319",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Vanesa Martins",
+      "Produto": "M319",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Almerinda Calisto",
+      "Produto": "M319",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Manuela Oliveira",
+      "Produto": "M319",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Leonorita Pereira",
+      "Produto": "M319",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Leonorita Pereira",
+      "Produto": "M319",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Isabel Cruz",
+      "Produto": "M319",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "M322",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "M322",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M322",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Eni Marques",
+      "Produto": "M322",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Helena Rato Pereira",
+      "Produto": "M322",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Vanesa Martins",
+      "Produto": "M322",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Vera Massano",
+      "Produto": "M322",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M323",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Teresa Martins",
+      "Produto": "M327",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Carmo Moreira",
+      "Produto": "M327",
+      "Quantidade": 0.8
+    },
+    {
+      "Cliente": "Ana Lagoa",
+      "Produto": "M327",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Helena Rato Pereira",
+      "Produto": "M327",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Élia Laranja Pinheiro",
+      "Produto": "M327",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Fernanda Pacheco",
+      "Produto": "M327",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Isabel Cruz",
+      "Produto": "M327",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "M334",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Ana Maria Oliveira",
+      "Produto": "M334",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "M335",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M338",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Almerinda Calisto",
+      "Produto": "M338",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "M341",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Aninha Santos",
+      "Produto": "M343",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Rocha",
+      "Produto": "M343",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M343",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Gina's Aldeias",
+      "Produto": "M343",
+      "Quantidade": 0.5
+    },
+    {
+      "Cliente": "Leonorita Pereira",
+      "Produto": "M343",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cacilda Ribeiro",
+      "Produto": "M343",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M343",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Isabel Cruz",
+      "Produto": "M344",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M347",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Maria João",
+      "Produto": "M347",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Ana Lagoa",
+      "Produto": "M347",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Xana Sousa",
+      "Produto": "M347",
+      "Quantidade": 0.5
+    },
+    {
+      "Cliente": "Gina's Aldeias",
+      "Produto": "M347",
+      "Quantidade": 0.5
+    },
+    {
+      "Cliente": "Manuela Oliveira",
+      "Produto": "M347",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Maria Oliveira",
+      "Produto": "M350",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Isabel Martins",
+      "Produto": "M352",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Eni Marques",
+      "Produto": "M352",
+      "Quantidade": 4.0
+    },
+    {
+      "Cliente": "Fernanda Pacheco",
+      "Produto": "M352",
+      "Quantidade": 2.5
+    },
+    {
+      "Cliente": "Conceição Monteiro",
+      "Produto": "M355",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Dulce Maria",
+      "Produto": "M45",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M45",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M46",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Helena Rato Pereira",
+      "Produto": "M46",
+      "Quantidade": 2.5
+    },
+    {
+      "Cliente": "Ana Lagoa",
+      "Produto": "M46",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M46",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Almerinda Calisto",
+      "Produto": "M46",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "M47",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Carmo Moreira",
+      "Produto": "M47",
+      "Quantidade": 1.3
+    },
+    {
+      "Cliente": "Almerinda Calisto",
+      "Produto": "M47",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sónia Branco",
+      "Produto": "M47",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Queta Maga",
+      "Produto": "M49",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M49",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Teresa Martins",
+      "Produto": "M49",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Margarida Marreiros",
+      "Produto": "M49",
+      "Quantidade": 0.6
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M50",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Graça Gonçalves",
+      "Produto": "M50",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Gina's Aldeias",
+      "Produto": "M50",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Helena Rato Pereira",
+      "Produto": "M51",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Teresa Tavares",
+      "Produto": "M51",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M51",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "M52",
+      "Quantidade": 0.5
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "M52",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Vanesa Martins",
+      "Produto": "M52",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Conceição Monteiro",
+      "Produto": "M52",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Coutinho Aldina",
+      "Produto": "M52",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "M56",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M56",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Isabel Cruz",
+      "Produto": "M56",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Toñi Prieto",
+      "Produto": "M56",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Queta Maga",
+      "Produto": "M59",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Oliveira Limpens",
+      "Produto": "M59",
+      "Quantidade": 4.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M59",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Coutinho Aldina",
+      "Produto": "M63",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Queta Maga",
+      "Produto": "M63",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M67",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M68",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Sónia Branco",
+      "Produto": "M68",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Maria Massa",
+      "Produto": "M68",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Goretti Oliveira",
+      "Produto": "M68",
+      "Quantidade": 2.5
+    },
+    {
+      "Cliente": "Isabel Cruz",
+      "Produto": "M68",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Teresa Tavares",
+      "Produto": "M68",
+      "Quantidade": 0.01
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M70",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria João Vinagre",
+      "Produto": "M70",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Coutinho Aldina",
+      "Produto": "M71",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Gina's Aldeias",
+      "Produto": "M71",
+      "Quantidade": 0.5
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M75",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Fernanda Rocha",
+      "Produto": "M75",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Maria Massa",
+      "Produto": "M75",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Isabel Morais",
+      "Produto": "M75",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Fernanda Pacheco",
+      "Produto": "M75",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M77",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "M77",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Almerinda Calisto",
+      "Produto": "M77",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "M77",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "M77",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Helena Rato Pereira",
+      "Produto": "M79",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Marisa Pinho",
+      "Produto": "M79",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Teresa Tavares",
+      "Produto": "M79",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Leonorita Pereira",
+      "Produto": "M79",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Madalena Rosa",
+      "Produto": "M79",
+      "Quantidade": 1.2
+    },
+    {
+      "Cliente": "Fernanda Peixoto",
+      "Produto": "M79",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Almerinda Calisto",
+      "Produto": "M83",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "M86",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Teresa Tavares",
+      "Produto": "M86",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Graça Gonçalves",
+      "Produto": "M86",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Pacheco",
+      "Produto": "M86",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M87",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Ana Lagoa",
+      "Produto": "M87",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Graça Gonçalves",
+      "Produto": "M87",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "M87",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Isabel Cruz",
+      "Produto": "M88",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Teresa Martins",
+      "Produto": "M88",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Ana Lagoa",
+      "Produto": "M88",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Carmo Moreira",
+      "Produto": "M88",
+      "Quantidade": 0.8
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "M88",
+      "Quantidade": 0.5
+    },
+    {
+      "Cliente": "Helena Rato Pereira",
+      "Produto": "M89",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Coutinho Aldina",
+      "Produto": "M89",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M89",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Fernanda Goulão Crispim",
+      "Produto": "M89",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "M94",
+      "Quantidade": 1.25
+    },
+    {
+      "Cliente": "Fernanda Goulão Crispim",
+      "Produto": "M94",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Queta Maga",
+      "Produto": "M94",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Fernanda Rocha",
+      "Produto": "M94",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Helena Rato Pereira",
+      "Produto": "M95",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M95",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Aninha Santos",
+      "Produto": "M95",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Rosa Bottiglieri",
+      "Produto": "M96",
+      "Quantidade": 3.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "M96",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Teresa Martins",
+      "Produto": "M98",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Helena Rato Pereira",
+      "Produto": "M98",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Almerinda Calisto",
+      "Produto": "M98",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Coutinho Aldina",
+      "Produto": "M98",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Isabel Cruz",
+      "Produto": "M98",
+      "Quantidade": 1.5
+    },
+    {
+      "Cliente": "Leonorita Pereira",
+      "Produto": "M98",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Aninha Santos",
+      "Produto": "R1",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cláudia Fernandes",
+      "Produto": "R1",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R100",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Elisabete Ferreira",
+      "Produto": "R100",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria João Vinagre",
+      "Produto": "R102",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "R102",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Goulão Crispim",
+      "Produto": "R103",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "R103",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "R105",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "R106",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Vanesa Martins",
+      "Produto": "R106",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "R106",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Margarida Marreiros",
+      "Produto": "R109",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "R11",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Gina's Aldeias",
+      "Produto": "R11",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Manuela Fernandes",
+      "Produto": "R113",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Brigite Paleta",
+      "Produto": "R113",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R113",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "R115",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "R116",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Oliveira Limpens",
+      "Produto": "R117",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Vanesa Martins",
+      "Produto": "R117",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cláudia Fernandes",
+      "Produto": "R118",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R118",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Brigite Paleta",
+      "Produto": "R118",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "R13",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Maria Oliveira",
+      "Produto": "R14",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Anabela Redondo",
+      "Produto": "R14",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "R14",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Vanesa Martins",
+      "Produto": "R14",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Goulão Crispim",
+      "Produto": "R14",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R14",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R16",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "R18",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "R18",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "R2",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Vanesa Martins",
+      "Produto": "R20",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R20",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Margarida Marreiros",
+      "Produto": "R22",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Leonorita Pereira",
+      "Produto": "R24",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cláudia Fernandes",
+      "Produto": "R25",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Almerinda Calisto",
+      "Produto": "R25",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Brigite Paleta",
+      "Produto": "R25",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "R25",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R25",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Rocha",
+      "Produto": "R26",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Brigite Paleta",
+      "Produto": "R26",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Goulão Crispim",
+      "Produto": "R26",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Leonorita Pereira",
+      "Produto": "R26",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "R26",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Eva Abal Abal",
+      "Produto": "R26",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "R28",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Oliveira Limpens",
+      "Produto": "R32",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Margarida Marreiros",
+      "Produto": "R32",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cláudia Fernandes",
+      "Produto": "R32",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "R32",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "R32",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Leonorita Pereira",
+      "Produto": "R33",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Almerinda Calisto",
+      "Produto": "R33",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Oliveira Limpens",
+      "Produto": "R35",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Vanesa Martins",
+      "Produto": "R35",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "R35",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cláudia Fernandes",
+      "Produto": "R35",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "R36",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "R37",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Gina's Aldeias",
+      "Produto": "R37",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria João Vinagre",
+      "Produto": "R38",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R38",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "R4",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Almerinda Calisto",
+      "Produto": "R45",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "R47",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Margarida Marreiros",
+      "Produto": "R47",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R47",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R49",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R5",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Elisabete Ferreira",
+      "Produto": "R5",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria João Vinagre",
+      "Produto": "R5",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Rocha",
+      "Produto": "R50",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Brigite Paleta",
+      "Produto": "R50",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R51",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Goulão Crispim",
+      "Produto": "R52",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Paula Resende",
+      "Produto": "R522",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "R53",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "R53",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Margarida Marreiros",
+      "Produto": "R53",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria João Vinagre",
+      "Produto": "R54",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "R55",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Lagoa",
+      "Produto": "R55",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "R55",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Margarida Marreiros",
+      "Produto": "R56",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Vanesa Martins",
+      "Produto": "R62",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "R66",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "R66",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Isabel Morais",
+      "Produto": "R66",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R66",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "R66",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Goulão Crispim",
+      "Produto": "R67",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "R67",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Vanesa Martins",
+      "Produto": "R68",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Almerinda Calisto",
+      "Produto": "R71",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "R73",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "R74",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Lagoa",
+      "Produto": "R74",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "R76",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R76",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Elisabete Ferreira",
+      "Produto": "R76",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Margarida Marreiros",
+      "Produto": "R77",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Aninha Santos",
+      "Produto": "R78",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "R78",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Margarida Marreiros",
+      "Produto": "R79",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Vanesa Martins",
+      "Produto": "R79",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R80",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Lagoa",
+      "Produto": "R80",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R84",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cláudia Fernandes",
+      "Produto": "R87",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "R87",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Lagoa",
+      "Produto": "R89",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R89",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Paula Resende",
+      "Produto": "R89",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "R94",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R95",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Gina's Aldeias",
+      "Produto": "R95",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "R96",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "R98",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Aninha Santos",
+      "Produto": "R98",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "R99",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "R99",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "T1",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Isabel Martins",
+      "Produto": "T101",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Rocha",
+      "Produto": "T101",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cristina Branco",
+      "Produto": "T101",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Roseta Assis",
+      "Produto": "T101",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Lagoa",
+      "Produto": "T101",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Maria Oliveira",
+      "Produto": "T101",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Teresa Castro",
+      "Produto": "T107",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "T112",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Carla Rafael",
+      "Produto": "T115",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Henriques",
+      "Produto": "T117",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Arminda Duarte",
+      "Produto": "T117",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "T119",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria Roseta Assis",
+      "Produto": "T120",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria João Vinagre",
+      "Produto": "T13",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Henriques",
+      "Produto": "T16",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "T16",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Carla Rafael",
+      "Produto": "T19",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "T35",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "T4",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Teresa Castro",
+      "Produto": "T4",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Margarida Marreiros",
+      "Produto": "T408",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Henriques",
+      "Produto": "T408",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Henriques",
+      "Produto": "T412",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Lagoa",
+      "Produto": "T413",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Henriques",
+      "Produto": "T413",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Queta Maga",
+      "Produto": "T415",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "T416",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Teresa Castro",
+      "Produto": "T416",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "T42",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "T42",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "T421",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Teresa Castro",
+      "Produto": "T421",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "T421",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Eva Abal Abal",
+      "Produto": "T425",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Teresa Castro",
+      "Produto": "T425",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Rocha",
+      "Produto": "T425",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "T425",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "T425",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Teresa Castro",
+      "Produto": "T425",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Isabel Martins",
+      "Produto": "T429",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Teresa Castro",
+      "Produto": "T429",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Henriques",
+      "Produto": "T431",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cláudia Fernandes",
+      "Produto": "T431",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Isabel Martins",
+      "Produto": "T433",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cláudia Fernandes",
+      "Produto": "T433",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "T437",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Maria De Jesus Martins",
+      "Produto": "T437",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Henriques",
+      "Produto": "T44",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Eva Abal Abal",
+      "Produto": "T440",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Carla Rafael",
+      "Produto": "T440",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Queta Maga",
+      "Produto": "T441",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Henriques",
+      "Produto": "T444",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "T444",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Fernanda Goulão Crispim",
+      "Produto": "T444",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Queta Maga",
+      "Produto": "T445",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Brigite Paleta",
+      "Produto": "T448",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Conceição Monteiro",
+      "Produto": "T448",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": "Carla Rafael",
+      "Produto": "T47",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Teresa Castro",
+      "Produto": "T47",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "T506",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Rocha",
+      "Produto": "T513",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Margarida Marreiros",
+      "Produto": "T513",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "T513",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Pinto",
+      "Produto": "T514",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Pinto",
+      "Produto": "T519",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "T519",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Queta Maga",
+      "Produto": "T521",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Henriques",
+      "Produto": "T522",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Paula Martins",
+      "Produto": "T522",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "T528",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Isabel Martins",
+      "Produto": "T528",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Pinto",
+      "Produto": "T528",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Maria Oliveira",
+      "Produto": "T528",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "T531",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Carla Rafael",
+      "Produto": "T533",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Manuela Fernandes",
+      "Produto": "T535",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cláudia Fernandes",
+      "Produto": "T538",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Goulão Crispim",
+      "Produto": "T54",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Rocha",
+      "Produto": "T544",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Henriques",
+      "Produto": "T544",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "T546",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Almerinda Calisto",
+      "Produto": "T546",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "T61",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Carla Rafael",
+      "Produto": "T65",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "T68",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "T70",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cláudia Fernandes",
+      "Produto": "T74",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "T76",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Maria Oliveira",
+      "Produto": "T76",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Fernanda Fiuza",
+      "Produto": "T80",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Sandra Fonseca",
+      "Produto": "T81",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Cláudia Fernandes",
+      "Produto": "T82",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Lagoa",
+      "Produto": "T82",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Brigite Paleta",
+      "Produto": "T82",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Brigite Paleta",
+      "Produto": "T86",
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": "Ana Calçada",
+      "Produto": "T95",
+      "Quantidade": 2.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    },
+    {
+      "Cliente": NaN,
+      "Produto": NaN,
+      "Quantidade": 1.0
+    }
+  ],
+  "price_overrides": {
+    "a3": 3.0,
+    "a4": 3.0,
+    "m109": 3.0,
+    "m117": 3.0,
+    "m104": 3.0,
+    "m120": 3.0,
+    "m227": 3.0,
+    "m224": 3.0,
+    "m318": 3.0,
+    "m101": 3.0,
+    "m103": 3.0,
+    "m105": 3.0,
+    "m106": 3.0,
+    "m111": 3.0,
+    "m113": 3.0,
+    "m116": 3.0,
+    "m200": 3.0,
+    "m204": 3.0,
+    "m207": 3.0,
+    "m209": 3.0,
+    "m213": 3.0,
+    "m214": 3.0,
+    "m215": 3.0,
+    "m216": 3.0,
+    "m220": 3.0,
+    "m223": 3.0,
+    "m228": 3.0,
+    "m229": 3.0,
+    "m230": 3.0,
+    "m231": 3.0,
+    "m232": 3.0,
+    "m234": 3.0,
+    "m235": 3.0,
+    "m236": 3.0,
+    "m237": 3.0,
+    "m243": 3.0,
+    "m244": 3.0,
+    "m311": 3.0,
+    "m313": 3.0,
+    "m314": 3.0,
+    "m315": 3.0,
+    "m316": 3.0,
+    "m317": 3.0,
+    "m319": 3.0,
+    "m322": 3.0,
+    "m323": 3.0,
+    "m327": 3.0,
+    "m334": 3.0,
+    "m335": 3.0,
+    "m338": 3.0,
+    "m341": 3.0,
+    "m343": 3.0,
+    "m344": 3.0,
+    "m347": 3.0,
+    "m350": 3.0,
+    "m352": 3.0,
+    "m355": 3.0,
+    "m45": 3.0,
+    "m46": 3.0,
+    "m47": 3.0,
+    "m49": 3.0,
+    "m50": 3.0,
+    "m51": 3.0,
+    "m52": 3.0,
+    "m56": 3.0,
+    "m59": 3.0,
+    "m63": 3.0,
+    "m67": 3.0,
+    "m68": 2.0,
+    "m70": 2.0,
+    "m71": 2.0,
+    "m75": 2.0,
+    "m77": 2.0,
+    "m79": 2.0,
+    "m83": 2.0,
+    "m86": 2.0,
+    "m87": 2.0,
+    "m88": 2.0,
+    "m89": 2.0,
+    "m94": 2.0,
+    "m95": 2.0,
+    "m96": 2.0,
+    "m98": 2.0,
+    "nan": 2.0,
+    "r1": 2.0,
+    "r100": 2.0,
+    "r102": 2.0,
+    "r103": 2.0,
+    "r105": 2.0,
+    "r106": 2.0,
+    "r109": 2.0,
+    "r11": 2.0,
+    "r113": 2.0,
+    "r115": 2.0,
+    "r116": 2.0,
+    "r117": 2.0,
+    "r118": 2.0,
+    "r13": 2.0,
+    "r14": 2.0,
+    "r16": 2.0,
+    "r18": 2.0,
+    "r2": 2.0,
+    "r20": 2.0,
+    "r22": 2.0,
+    "r24": 2.0,
+    "r25": 2.0,
+    "r26": 2.0,
+    "r28": 2.0,
+    "r32": 2.0,
+    "r33": 2.0,
+    "r35": 2.0,
+    "r36": 2.0,
+    "r37": 2.0,
+    "r38": 2.0,
+    "r4": 2.0,
+    "r45": 2.0,
+    "r47": 2.0,
+    "r49": 2.0,
+    "r5": 2.0,
+    "r50": 2.0,
+    "r51": 2.0,
+    "r52": 2.0,
+    "r522": 2.0,
+    "r53": 2.0,
+    "r54": 2.0,
+    "r55": 3.0,
+    "r56": 32.0,
+    "r62": 2.0,
+    "r66": 3.0,
+    "r67": 3.0,
+    "r68": 2.0,
+    "r71": 2.0,
+    "r73": 2.0,
+    "r74": 2.0,
+    "r76": 2.0,
+    "r77": 2.0,
+    "r78": 3.0,
+    "r79": 3.0,
+    "r80": 3.0,
+    "r84": 3.0,
+    "r87": 3.0,
+    "r89": 2.0,
+    "r94": 2.0,
+    "r95": 2.0,
+    "r96": 2.0,
+    "r98": 22.0,
+    "r99": 2.0,
+    "t1": 2.0,
+    "t101": 2.0,
+    "t107": 2.0,
+    "t112": 2.0,
+    "t115": 2.0,
+    "t117": 2.0,
+    "t119": 2.0,
+    "t120": 2.0,
+    "t13": 2.0,
+    "t16": 2.0,
+    "t19": 2.0,
+    "t35": 2.0,
+    "t4": 2.0,
+    "t408": 2.0,
+    "t412": 2.0,
+    "t413": 2.0,
+    "t415": 2.0,
+    "t416": 2.0,
+    "t42": 2.0,
+    "t421": 2.0,
+    "t425": 2.0,
+    "t429": 2.0,
+    "t431": 2.0,
+    "t433": 2.0,
+    "t437": 2.0,
+    "t44": 2.0,
+    "t440": 2.0,
+    "t441": 2.0,
+    "t444": 2.0,
+    "t445": 2.0,
+    "t448": 2.0,
+    "t47": 2.0,
+    "t506": 2.0,
+    "t513": 2.0,
+    "t514": 2.0,
+    "t519": 2.0,
+    "t521": 2.0,
+    "t522": 2.0,
+    "t528": 2.0,
+    "t531": 2.0,
+    "t533": 2.0,
+    "t535": 2.0,
+    "t538": 2.0,
+    "t54": 2.0,
+    "t544": 2.0,
+    "t546": 2.0,
+    "t61": 2.0,
+    "t65": 2.0,
+    "t68": 2.0,
+    "t70": 2.0,
+    "t74": 2.0,
+    "t76": 2.0,
+    "t80": 2.0,
+    "t81": 2.0,
+    "t82": 2.0,
+    "t86": 2.0,
+    "t95": 2.0
+  }
+}
