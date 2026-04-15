@@ -578,24 +578,33 @@ with tab_main:
         if "price_overrides" not in st.session_state or not st.session_state.get("price_overrides"):
             st.session_state["price_overrides"] = loaded.get("price_overrides") or {}
     else:
-        xlsx = st.file_uploader("Upload do Excel (.xlsx)", type=["xlsx"], help="Precisa conter a aba `Comments` (ou semelhante).")
-        if xlsx is not None:
+        uploaded = st.file_uploader(
+            "Upload do ficheiro (.xlsx ou .csv)",
+            type=["xlsx", "csv"],
+            help="O Excel deve conter a aba `Comments` (ou semelhante). O CSV deve ter colunas como Cliente/Nome, Referência/Produto, Quantidade (e opcionalmente user_id).",
+        )
+        if uploaded is not None:
             try:
-                raw = xlsx.getvalue()
-                excel = pd.ExcelFile(io.BytesIO(raw))
-                sheet_names = excel.sheet_names
-                default_orders = _detect_sheet(excel, "orders")
-                orders_sheet = st.selectbox(
-                    "Aba de comentários / encomendas",
-                    options=sheet_names,
-                    index=sheet_names.index(default_orders) if default_orders in sheet_names else 0,
-                )
-                orders_df = pd.read_excel(excel, sheet_name=orders_sheet)
-                orders_source_label = f"Excel: {xlsx.name} / aba: {orders_sheet}"
+                name = (uploaded.name or "").lower()
+                if name.endswith(".csv"):
+                    orders_df = pd.read_csv(uploaded)
+                    orders_source_label = f"CSV: {uploaded.name}"
+                else:
+                    raw = uploaded.getvalue()
+                    excel = pd.ExcelFile(io.BytesIO(raw))
+                    sheet_names = excel.sheet_names
+                    default_orders = _detect_sheet(excel, "orders")
+                    orders_sheet = st.selectbox(
+                        "Aba de comentários / encomendas",
+                        options=sheet_names,
+                        index=sheet_names.index(default_orders) if default_orders in sheet_names else 0,
+                    )
+                    orders_df = pd.read_excel(excel, sheet_name=orders_sheet)
+                    orders_source_label = f"Excel: {uploaded.name} / aba: {orders_sheet}"
                 # We will always input prices in-app for this flow
                 prices_df = pd.DataFrame(columns=["Produto", "Preco"])
             except Exception as e:
-                st.error(f"Erro ao ler o Excel: {e}")
+                st.error(f"Erro ao ler o ficheiro: {e}")
 
 if orders_df is not None and prices_df is not None:
     try:
