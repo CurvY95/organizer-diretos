@@ -366,12 +366,22 @@ def build_facebook_chat_url(user_id: str = "", profile_id: str = "") -> str:
     user_id = str(user_id or "").strip()
     profile_id = str(profile_id or "").strip()
 
-    target = user_id or profile_id
+    # Prefer numeric IDs (UserID) over usernames (ProfileID).
+    def is_numeric_id(v: str) -> bool:
+        return bool(re.fullmatch(r"\d{5,}", v or ""))
+
+    target = ""
+    if is_numeric_id(user_id):
+        target = user_id
+    elif is_numeric_id(profile_id):
+        target = profile_id
+    else:
+        target = user_id or profile_id
     if not target:
         return ""
 
     return (
-        f"https://business.facebook.com/latest/inbox/all?asset_id={FB_PAGE_ID}"
+        f"https://business.facebook.com/latest/inbox/all/?asset_id={FB_PAGE_ID}&mailbox_id={FB_PAGE_ID}"
         f"&selected_item_id={target}&thread_type=FB_MESSAGE"
     )
 
