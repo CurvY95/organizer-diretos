@@ -932,6 +932,8 @@ if orders_df is not None and prices_df is not None:
                     user_id = ids.get("user_id", "")
                     profile_id = ids.get("profile_id", "")
                     chat_url = build_facebook_chat_url(user_id=user_id, profile_id=profile_id)
+                    inbox_base_url = f"https://business.facebook.com/latest/inbox/all/?asset_id={FB_PAGE_ID}&mailbox_id={FB_PAGE_ID}"
+                    chat_or_inbox_url = chat_url or inbox_base_url
 
                     st.markdown("<div class='od-muted' style='margin-top:8px'><b>Ações</b></div>", unsafe_allow_html=True)
                     a1, a2, a3, a4 = st.columns([1.2, 1.1, 1.5, 2.2])
@@ -970,14 +972,19 @@ if orders_df is not None and prices_df is not None:
                         )
                     with a2:
                         if chat_url:
-                            st.link_button("ABRIR CHAT", chat_url, use_container_width=True, key=f"open_chat_{btn_key_base}")
-                        else:
-                            st.button(
+                            st.link_button(
                                 "ABRIR CHAT",
-                                disabled=True,
+                                chat_or_inbox_url,
                                 use_container_width=True,
-                                help="Falta `UserId` no Excel.",
-                                key=f"open_chat_disabled_{btn_key_base}",
+                                key=f"open_chat_{btn_key_base}",
+                            )
+                        else:
+                            st.link_button(
+                                "ABRIR INBOX",
+                                chat_or_inbox_url,
+                                use_container_width=True,
+                                help="Sem UserID/ProfileID; abre o Inbox da página para pesquisar pelo nome.",
+                                key=f"open_inbox_{btn_key_base}",
                             )
                     with a3:
                         st.components.v1.html(
@@ -995,7 +1002,7 @@ if orders_df is not None and prices_df is not None:
   if (!btn || btn.dataset.bound === "1") return;
   btn.dataset.bound = "1";
   const text = {json.dumps(client_msg)};
-  const url = {json.dumps(chat_url)};
+  const url = {json.dumps(chat_or_inbox_url)};
   btn.addEventListener("click", async () => {{
     try {{
       await navigator.clipboard.writeText(text);
@@ -1069,6 +1076,106 @@ if orders_df is not None and prices_df is not None:
                     height=220,
                     key=f"single_client_msg_{client_selected}_{tpl_ver}",
                     disabled=True,
+                )
+
+            # Ações (na aba de Mensagens): copiar / abrir chat / copiar+abrir
+            ids = client_ids_map.get(client_selected, {}) if "client_ids_map" in locals() else {}
+            user_id = (ids.get("user_id") or "").strip()
+            profile_id = (ids.get("profile_id") or "").strip()
+            chat_url = build_facebook_chat_url(user_id=user_id, profile_id=profile_id)
+            inbox_base_url = f"https://business.facebook.com/latest/inbox/all/?asset_id={FB_PAGE_ID}&mailbox_id={FB_PAGE_ID}"
+            chat_or_inbox_url = chat_url or inbox_base_url
+
+            msg_to_copy = (
+                str(st.session_state.get("single_client_msg_editable") or msg)
+                if allow_edit
+                else msg
+            )
+
+            st.markdown("<div class='od-muted' style='margin-top:8px'><b>Ações</b></div>", unsafe_allow_html=True)
+            m1, m2, m3 = st.columns([1.2, 1.1, 1.5])
+            msg_btn_key_base = f"msgtab_{client_selected}_{tpl_ver}"
+            with m1:
+                st.components.v1.html(
+                    f"""
+<div>
+  <button id="copy_msgtab_{msg_btn_key_base}" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: inherit; cursor:pointer;">
+    COPIAR MENSAGEM
+  </button>
+  <div id="copystatus_msgtab_{msg_btn_key_base}" style="margin-top:6px; font-size:0.9rem; opacity:0.85;"></div>
+</div>
+<script>
+(function() {{
+  const btn = document.getElementById("copy_msgtab_{msg_btn_key_base}");
+  const status = document.getElementById("copystatus_msgtab_{msg_btn_key_base}");
+  if (!btn || btn.dataset.bound === "1") return;
+  btn.dataset.bound = "1";
+  const text = {json.dumps(msg_to_copy)};
+  btn.addEventListener("click", async () => {{
+    try {{
+      await navigator.clipboard.writeText(text);
+      if (status) {{
+        status.textContent = "Mensagem copiada!";
+        setTimeout(() => {{ status.textContent = ""; }}, 2000);
+      }}
+    }} catch (e) {{
+      if (status) status.textContent = "Falha ao copiar. (Permissões do browser)";
+    }}
+  }});
+}})();
+</script>
+""",
+                    height=90,
+                )
+            with m2:
+                if chat_url:
+                    st.link_button(
+                        "ABRIR CHAT",
+                        chat_or_inbox_url,
+                        use_container_width=True,
+                        key=f"open_chat_msgtab_{msg_btn_key_base}",
+                    )
+                else:
+                    st.link_button(
+                        "ABRIR INBOX",
+                        chat_or_inbox_url,
+                        use_container_width=True,
+                        help="Sem UserID/ProfileID; abre o Inbox da página para pesquisar pelo nome.",
+                        key=f"open_inbox_msgtab_{msg_btn_key_base}",
+                    )
+            with m3:
+                st.components.v1.html(
+                    f"""
+<div>
+  <button id="copyopen_msgtab_{msg_btn_key_base}" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: inherit; cursor:pointer;">
+    COPIAR + ABRIR CHAT
+  </button>
+  <div id="copyopenstatus_msgtab_{msg_btn_key_base}" style="margin-top:6px; font-size:0.9rem; opacity:0.85;"></div>
+</div>
+<script>
+(function() {{
+  const btn = document.getElementById("copyopen_msgtab_{msg_btn_key_base}");
+  const status = document.getElementById("copyopenstatus_msgtab_{msg_btn_key_base}");
+  if (!btn || btn.dataset.bound === "1") return;
+  btn.dataset.bound = "1";
+  const text = {json.dumps(msg_to_copy)};
+  const url = {json.dumps(chat_or_inbox_url)};
+  btn.addEventListener("click", async () => {{
+    try {{
+      await navigator.clipboard.writeText(text);
+      if (status) {{
+        status.textContent = "Mensagem copiada!";
+        setTimeout(() => {{ status.textContent = ""; }}, 2000);
+      }}
+    }} catch (e) {{
+      if (status) status.textContent = "Falha ao copiar. (Permissões do browser)";
+    }}
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
+  }});
+}})();
+</script>
+""",
+                    height=90,
                 )
 
             st.divider()
