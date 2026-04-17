@@ -28,6 +28,11 @@ def _get_database_url() -> str:
         url = str(secrets.get("DATABASE_URL") or "").strip()
     url = url or str(os.getenv("DATABASE_URL") or "").strip()
     if url:
+        # Supabase Postgres requires SSL. If caller forgot sslmode, default to require.
+        if url.startswith("postgresql://") or url.startswith("postgres://"):
+            if "sslmode=" not in url:
+                joiner = "&" if "?" in url else "?"
+                url = f"{url}{joiner}sslmode=require"
         return url
 
     path = default_db_path()
