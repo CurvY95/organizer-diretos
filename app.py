@@ -948,14 +948,20 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
             st.session_state["history_created_at"] = created_at
             label = (st.session_state.get("session_label") or "").strip() or "Direto"
             source = orders_source_label or ""
-            odb.save_snapshot(
-                db_con,
-                session_id=session_id,
-                created_at=created_at,
-                label=label,
-                source=source,
-                merged_rows=merged_rows,
+            snapshot_key = (
+                f"{session_id}|{parsed_orders_fp}|{len(st.session_state.get('price_overrides') or {})}|"
+                f"{int(rows_for_db.shape[0])}"
             )
+            if st.session_state.get("last_db_snapshot_key") != snapshot_key:
+                odb.save_snapshot(
+                    db_con,
+                    session_id=session_id,
+                    created_at=created_at,
+                    label=label,
+                    source=source,
+                    merged_rows=merged_rows,
+                )
+                st.session_state["last_db_snapshot_key"] = snapshot_key
         except Exception as e:
             st.warning(f"DB: não consegui gravar histórico automaticamente: {e}")
 
@@ -1020,13 +1026,14 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
         # Merge with directory in DB: fill missing IDs from DB, then auto-update DB when file brings new IDs.
         try:
             to_upsert: list[tuple[str, str, str]] = []
+            bulk_db_ids = odb.get_customer_ids_bulk(db_con, clientes=list(client_ids_map.keys()))
             for nome, ids in client_ids_map.items():
                 file_user = (ids.get("user_id") or "").strip()
                 file_profile = (ids.get("profile_id") or "").strip()
 
                 # Fill missing from DB
                 if not file_user or not file_profile:
-                    db_ids = odb.get_customer_ids(db_con, cliente=nome)
+                    db_ids = bulk_db_ids.get(nome) or {"user_id": "", "profile_id": ""}
                     if not file_user and db_ids.get("user_id"):
                         ids["user_id"] = db_ids["user_id"]
                         file_user = ids["user_id"]
@@ -1036,7 +1043,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
 
                 # If file has IDs, upsert to DB (only when changed)
                 if file_user or file_profile:
-                    db_ids = odb.get_customer_ids(db_con, cliente=nome)
+                    db_ids = bulk_db_ids.get(nome) or {"user_id": "", "profile_id": ""}
                     if (file_user and file_user != (db_ids.get("user_id") or "")) or (
                         file_profile and file_profile != (db_ids.get("profile_id") or "")
                     ):
@@ -1053,6 +1060,14 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
 
         with tab_summary:
             st.subheader("Resumo")
+            priced_rows = int(merged["Preco"].notna().sum()) if "Preco" in merged.columns else 0
+            total_rows = int(merged.shape[0]) if merged is not None else 0
+            saved_prices = len(st.session_state.get("price_overrides") or {})
+            if priced_rows == 0:
+                st.warning(
+                    f"Sem linhas com preço aplicado ainda. "
+                    f"(Linhas: {total_rows} · Com preço: {priced_rows} · Preços guardados: {saved_prices})"
+                )
             summary = merged.dropna(subset=["Preco"]).groupby("Cliente", as_index=False).agg(
                 Total=("TotalItem", "sum"),
                 QuantidadeTotal=("Quantidade", "sum"),
@@ -1243,6 +1258,13 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
         with tab_messages:
             st.subheader("Mensagens")
             by_client2, details2 = build_summary(merged.dropna(subset=["Preco"]))
+            if not details2:
+                priced_rows = int(merged["Preco"].notna().sum()) if "Preco" in merged.columns else 0
+                saved_prices = len(st.session_state.get("price_overrides") or {})
+                st.warning(
+                    f"Sem mensagens ainda porque não há preços aplicados. "
+                    f"(Com preço: {priced_rows} · Preços guardados: {saved_prices})"
+                )
             totals_map = {str(r["Cliente"]): float(r["Total"]) for _, r in by_client2.iterrows()}
 
             allow_edit = st.checkbox("Permitir editar mensagem manualmente", value=False)
@@ -1455,6 +1477,13 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                 st.info("Dica: nesta página, a tab principal é a **5) Etiquetas 10×15**.")
 
             base = merged.dropna(subset=["Preco"]).copy()
+            if base.empty:
+                priced_rows = int(merged["Preco"].notna().sum()) if "Preco" in merged.columns else 0
+                saved_prices = len(st.session_state.get("price_overrides") or {})
+                st.warning(
+                    f"Sem etiquetas porque não há preços aplicados. "
+                    f"(Com preço: {priced_rows} · Preços guardados: {saved_prices})"
+                )
             has_hora = "Hora" in base.columns
             agg_spec = {"Quantidade": ("Quantidade", "sum"), "Preco": ("Preco", "max")}
             if has_hora:

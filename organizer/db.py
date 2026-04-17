@@ -326,6 +326,42 @@ def list_all_customers(engine: Engine, limit: int = 5000) -> list[str]:
         return [str(r["cliente"]) for r in rows]
 
 
+def get_customer_ids_bulk(engine: Engine, *, clientes: list[str]) -> dict[str, dict[str, str]]:
+    """
+    Bulk fetch user_id/profile_id for many customers.
+    Returns: {cliente: {user_id, profile_id}}
+    """
+    names = [str(c).strip() for c in (clientes or []) if str(c).strip()]
+    if not names:
+        return {}
+    tn = _table_names(engine)
+    customers = str(tn["customers"])
+
+    # Build portable IN (...) query (SQLite + Postgres via SQLAlchemy text).
+    placeholders = ", ".join([f":n{i}" for i in range(len(names))])
+    params = {f"n{i}": names[i] for i in range(len(names))}
+
+    with engine.begin() as con:
+        rows = con.execute(
+            text(
+                f"""
+                SELECT cliente, COALESCE(user_id, '') AS user_id, COALESCE(profile_id, '') AS profile_id
+                FROM {customers}
+                WHERE cliente IN ({placeholders});
+                """
+            ),
+            params,
+        ).mappings().all()
+
+    out: dict[str, dict[str, str]] = {}
+    for r in rows:
+        out[str(r["cliente"])] = {
+            "user_id": str(r.get("user_id") or "").strip(),
+            "profile_id": str(r.get("profile_id") or "").strip(),
+        }
+    return out
+
+
 def upsert_session(con, *, session_id: str, created_at: str, label: str, source: str, sessions_table: str) -> None:
     con.execute(
         text(
