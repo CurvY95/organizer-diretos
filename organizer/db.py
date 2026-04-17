@@ -187,12 +187,12 @@ def _ensure_customer_row(con, *, cliente: str, customers_table: str) -> None:
     now = _utc_now_iso()
     con.execute(
         text(
-            """
-            INSERT INTO {customers}(cliente, notes, tags, created_at, updated_at)
+            f"""
+            INSERT INTO {customers_table}(cliente, notes, tags, created_at, updated_at)
             VALUES(:cliente, '', '', :now, :now)
             ON CONFLICT(cliente) DO NOTHING;
             """
-        ).bindparams(customers=text(customers_table)),
+        ),
         {"cliente": cliente, "now": now},
     )
 
@@ -235,15 +235,15 @@ def upsert_customer_meta(engine: Engine, *, cliente: str, notes: str, tags: str)
 def upsert_session(con, *, session_id: str, created_at: str, label: str, source: str, sessions_table: str) -> None:
     con.execute(
         text(
-            """
-            INSERT INTO {sessions}(id, created_at, label, source)
+            f"""
+            INSERT INTO {sessions_table}(id, created_at, label, source)
             VALUES(:id, :created_at, :label, :source)
             ON CONFLICT(id) DO UPDATE SET
               created_at=excluded.created_at,
               label=excluded.label,
               source=excluded.source;
             """
-        ).bindparams(sessions=text(sessions_table)),
+        ),
         {"id": session_id, "created_at": created_at, "label": label or "", "source": source or ""},
     )
 
@@ -257,18 +257,18 @@ def replace_session_items(
     customers_table: str,
 ) -> None:
     # Full replace: delete existing then insert.
-    con.execute(text("DELETE FROM {items} WHERE session_id = :sid;").bindparams(items=text(items_table)), {"sid": session_id})
+    con.execute(text(f"DELETE FROM {items_table} WHERE session_id = :sid;"), {"sid": session_id})
     created_at = _utc_now_iso()
     for r in rows:
         _ensure_customer_row(con, cliente=str(r.get("Cliente") or ""), customers_table=customers_table)
         con.execute(
             text(
-                """
-                INSERT INTO {items}(
+                f"""
+                INSERT INTO {items_table}(
                   session_id, cliente, produto, quantidade, preco, total_item, comentario, created_at
                 ) VALUES (:sid, :cliente, :produto, :quantidade, :preco, :total_item, :comentario, :created_at);
                 """
-            ).bindparams(items=text(items_table)),
+            ),
             {
                 "sid": session_id,
                 "cliente": str(r.get("Cliente") or ""),
