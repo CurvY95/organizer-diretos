@@ -9,6 +9,14 @@ from datetime import datetime, timezone
 
 import pandas as pd
 import streamlit as st
+import tomllib
+
+try:
+    import gspread
+    from google.oauth2.service_account import Credentials
+except Exception:
+    gspread = None
+    Credentials = None
 
 
 @dataclass(frozen=True)
@@ -362,15 +370,130 @@ SESSIONS_DIR = os.path.join(os.getcwd(), "saved", "sessions")
 FB_PAGE_ID = "106851297526135"
 
 
-def build_facebook_chat_url(user_id: str = "", profile_id: str = "") -> str:
-    def normalize_target(v: str) -> str:
-        s = str(v or "").strip()
-        # Some CSV/Excel imports turn large numeric IDs into floats like "100023...332.0"
-        s = re.sub(r"^(\d{5,})\.0$", r"\1", s)
-        return s
+def _normalize_fb_target(v: str) -> str:
+    s = str(v or "").strip()
+    # Some CSV/Excel imports turn large numeric IDs into floats like "100023...332.0"
+    s = re.sub(r"^(\d{5,})\.0$", r"\1", s)
+    if s.lower() == "nan":
+        return ""
+    return s
 
-    user_id = normalize_target(user_id)
-    profile_id = normalize_target(profile_id)
+
+def _load_toml_if_exists(path: str) -> dict:
+    try:
+        if not os.path.exists(path):
+            return {}
+        with open(path, "rb") as f:
+            return tomllib.load(f) or {}
+    except Exception:
+        return {}
+
+
+def _get_gsheets_service_account_info() -> Optional[dict]:
+    # Prefer Streamlit secrets (works in Streamlit Cloud).
+    secrets = getattr(st, "secrets", {}) or {}
+    if hasattr(secrets, "get"):
+        info = secrets.get("GSHEETS_SERVICE_ACCOUNT")
+        if isinstance(info, dict) and info:
+            return info
+
+    # Local dev fallback: .streamlit/secrets.toml
+    local_secrets = _load_toml_if_exists(os.path.join(os.getcwd(), ".streamlit", "secrets.toml"))
+    info = (local_secrets.get("GSHEETS_SERVICE_ACCOUNT") or {}) if isinstance(local_secrets, dict) else {}
+    return info if isinstance(info, dict) and info else None
+
+
+def _get_gsheets_client():
+    if gspread is None or Credentials is None:
+        raise RuntimeError("Dependências do Google Sheets não instaladas (gspread/google-auth).")
+
+    info = _get_gsheets_service_account_info()
+    if not info:
+        raise RuntimeError(
+            "Credenciais do Google Sheets não configuradas. "
+            "Defina `GSHEETS_SERVICE_ACCOUNT` em `st.secrets` (ou em `.streamlit/secrets.toml`)."
+        )
+
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds = Credentials.from_service_account_info(info, scopes=scopes)
+    return gspread.authorize(creds)
+
+
+@st.cache_data(show_spinner=False, ttl=60)
+def _load_clients_directory_from_gsheets(spreadsheet_id: str, worksheet_name: str) -> dict[str, dict[str, str]]:
+    """
+    Returns map: Cliente -> {user_id, profile_id}
+    Expected columns: Cliente | UserId | ProfileId | updated_at (headers in row 1)
+    """
+    spreadsheet_id = str(spreadsheet_id or "").strip()
+    worksheet_name = str(worksheet_name or "").strip()
+    if not spreadsheet_id or not worksheet_name:
+        return {}
+
+    gc = _get_gsheets_client()
+    sh = gc.open_by_key(spreadsheet_id)
+    ws = sh.worksheet(worksheet_name)
+
+    rows = ws.get_all_records() or []
+    out: dict[str, dict[str, str]] = {}
+    for r in rows:
+        name = str(r.get("Cliente") or "").strip()
+        if not name:
+            continue
+        out[name] = {
+            "user_id": _normalize_fb_target(r.get("UserId") or ""),
+            "profile_id": _normalize_fb_target(r.get("ProfileId") or ""),
+        }
+    return out
+
+
+def _ensure_clients_sheet_headers(ws) -> None:
+    # Ensure row 1 has expected headers (idempotent).
+    headers = ws.row_values(1) or []
+    expected = ["Cliente", "UserId", "ProfileId", "updated_at"]
+    if [h.strip() for h in headers[: len(expected)]] != expected:
+        ws.update("A1:D1", [expected])
+
+
+def upsert_client_in_gsheets(*, spreadsheet_id: str, worksheet_name: str, cliente: str, user_id: str, profile_id: str) -> None:
+    spreadsheet_id = str(spreadsheet_id or "").strip()
+    worksheet_name = str(worksheet_name or "").strip()
+    cliente = str(cliente or "").strip()
+    if not spreadsheet_id or not worksheet_name:
+        raise ValueError("Spreadsheet ID / worksheet não definidos.")
+    if not cliente:
+        raise ValueError("Cliente vazio.")
+
+    gc = _get_gsheets_client()
+    sh = gc.open_by_key(spreadsheet_id)
+    ws = sh.worksheet(worksheet_name)
+    _ensure_clients_sheet_headers(ws)
+
+    user_id = _normalize_fb_target(user_id)
+    profile_id = _normalize_fb_target(profile_id)
+
+    # Find existing row by exact Cliente (column A).
+    # Note: gspread find searches all cells; limit to column A for speed.
+    col_a = ws.col_values(1) or []
+    row_idx = None
+    for i, v in enumerate(col_a[1:], start=2):  # skip header
+        if str(v).strip() == cliente:
+            row_idx = i
+            break
+
+    updated_at = now_iso()
+    if row_idx is None:
+        ws.append_row([cliente, user_id, profile_id, updated_at], value_input_option="RAW")
+    else:
+        ws.update(f"A{row_idx}:D{row_idx}", [[cliente, user_id, profile_id, updated_at]])
+
+    # Invalidate cache so UI refreshes quickly.
+    _load_clients_directory_from_gsheets.clear()
+
+
+def build_facebook_chat_url(user_id: str = "", profile_id: str = "") -> str:
+    user_id = _normalize_fb_target(user_id)
+    profile_id = _normalize_fb_target(profile_id)
 
     # Prefer numeric IDs (UserID) over usernames (ProfileID).
     def is_numeric_id(v: str) -> bool:
@@ -390,6 +513,21 @@ def build_facebook_chat_url(user_id: str = "", profile_id: str = "") -> str:
         f"https://business.facebook.com/latest/inbox/all/?asset_id={FB_PAGE_ID}&mailbox_id={FB_PAGE_ID}"
         f"&selected_item_id={target}&thread_type=FB_MESSAGE"
     )
+
+
+def build_facebook_profile_url(user_id: str = "", profile_id: str = "") -> str:
+    user_id = _normalize_fb_target(user_id)
+    profile_id = _normalize_fb_target(profile_id)
+
+    # If we have a numeric id, open the canonical profile.php.
+    if re.fullmatch(r"\d{5,}", user_id or ""):
+        return f"https://www.facebook.com/profile.php?id={user_id}"
+
+    # Otherwise try username / profile handle.
+    if profile_id:
+        return f"https://www.facebook.com/{profile_id}"
+
+    return ""
 
 
 def require_login() -> None:
@@ -569,6 +707,16 @@ with st.sidebar:
         height=70,
     )
     outro = st.text_input("Fecho", value="Obrigado!")
+
+    st.subheader("Diretório de clientes (Google Sheets)")
+    use_clients_dir = st.checkbox("Usar diretório de IDs (reutilizar nomes/IDs)", value=False)
+    clients_sheet_id = st.text_input("Spreadsheet ID", value=st.session_state.get("clients_sheet_id", ""))
+    clients_sheet_tab = st.text_input("Worksheet (aba)", value=st.session_state.get("clients_sheet_tab", "clients"))
+    st.session_state["use_clients_dir"] = use_clients_dir
+    st.session_state["clients_sheet_id"] = clients_sheet_id
+    st.session_state["clients_sheet_tab"] = clients_sheet_tab
+    if use_clients_dir:
+        st.caption("A Sheet deve ter colunas: Cliente, UserId, ProfileId, updated_at")
 
 st.divider()
 
@@ -884,6 +1032,22 @@ if orders_df is not None and prices_df is not None:
                 "profile_id": profile_id,
             }
 
+        # Merge with shared directory (Google Sheets): only fill missing IDs.
+        clients_dir_map: dict[str, dict[str, str]] = {}
+        try:
+            if st.session_state.get("use_clients_dir") and clients_sheet_id and clients_sheet_tab:
+                clients_dir_map = _load_clients_directory_from_gsheets(clients_sheet_id, clients_sheet_tab)
+        except Exception as e:
+            st.warning(f"Diretório (Sheets): {e}")
+            clients_dir_map = {}
+
+        if clients_dir_map:
+            for nome, ids in client_ids_map.items():
+                if (not (ids.get("user_id") or "").strip()) and (clients_dir_map.get(nome) or {}).get("user_id"):
+                    ids["user_id"] = (clients_dir_map[nome].get("user_id") or "").strip()
+                if (not (ids.get("profile_id") or "").strip()) and (clients_dir_map.get(nome) or {}).get("profile_id"):
+                    ids["profile_id"] = (clients_dir_map[nome].get("profile_id") or "").strip()
+
         with tab_summary:
             st.subheader("Resumo")
             summary = merged.dropna(subset=["Preco"]).groupby("Cliente", as_index=False).agg(
@@ -931,12 +1095,14 @@ if orders_df is not None and prices_df is not None:
                     ids = client_ids_map.get(client, {})
                     user_id = ids.get("user_id", "")
                     profile_id = ids.get("profile_id", "")
-                    chat_url = build_facebook_chat_url(user_id=user_id, profile_id=profile_id)
+                    # Só abrimos chat direto quando temos UserId.
+                    chat_url = build_facebook_chat_url(user_id=user_id, profile_id="")
+                    profile_url = build_facebook_profile_url(user_id=user_id, profile_id=profile_id)
                     inbox_base_url = f"https://business.facebook.com/latest/inbox/all/?asset_id={FB_PAGE_ID}&mailbox_id={FB_PAGE_ID}"
                     chat_or_inbox_url = chat_url or inbox_base_url
 
                     st.markdown("<div class='od-muted' style='margin-top:8px'><b>Ações</b></div>", unsafe_allow_html=True)
-                    a1, a2, a3, a4 = st.columns([1.2, 1.1, 1.5, 2.2])
+                    a1, a2, a3, a4, a5 = st.columns([1.2, 1.1, 1.1, 1.5, 1.8])
                     btn_key_base = f"{client}_{tpl_ver}"
                     with a1:
                         st.components.v1.html(
@@ -987,8 +1153,25 @@ if orders_df is not None and prices_df is not None:
                                 key=f"open_inbox_{btn_key_base}",
                             )
                     with a3:
-                        st.components.v1.html(
-                            f"""
+                        if profile_url:
+                            st.link_button(
+                                "ABRIR PERFIL",
+                                profile_url,
+                                use_container_width=True,
+                                key=f"open_profile_{btn_key_base}",
+                            )
+                        else:
+                            st.link_button(
+                                "ABRIR PERFIL",
+                                "about:blank",
+                                use_container_width=True,
+                                disabled=True,
+                                key=f"open_profile_disabled_{btn_key_base}",
+                            )
+                    with a4:
+                        if chat_url:
+                            st.components.v1.html(
+                                f"""
 <div>
   <button id="copyopen_{btn_key_base}" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: inherit; cursor:pointer;">
     COPIAR + ABRIR CHAT
@@ -1018,9 +1201,17 @@ if orders_df is not None and prices_df is not None:
 }})();
 </script>
 """,
-                            height=90,
-                        )
-                    with a4:
+                                height=90,
+                            )
+                        else:
+                            st.link_button(
+                                "COPIAR + ABRIR CHAT",
+                                "about:blank",
+                                use_container_width=True,
+                                disabled=True,
+                                key=f"copyopen_disabled_{btn_key_base}",
+                            )
+                    with a5:
                         if user_id and profile_id:
                             st.caption(f"User ID: `{user_id}` | Profile ID: `{profile_id}`")
                         elif user_id:
@@ -1082,7 +1273,9 @@ if orders_df is not None and prices_df is not None:
             ids = client_ids_map.get(client_selected, {}) if "client_ids_map" in locals() else {}
             user_id = (ids.get("user_id") or "").strip()
             profile_id = (ids.get("profile_id") or "").strip()
-            chat_url = build_facebook_chat_url(user_id=user_id, profile_id=profile_id)
+            # Só abrimos chat direto quando temos UserId.
+            chat_url = build_facebook_chat_url(user_id=user_id, profile_id="")
+            profile_url = build_facebook_profile_url(user_id=user_id, profile_id=profile_id)
             inbox_base_url = f"https://business.facebook.com/latest/inbox/all/?asset_id={FB_PAGE_ID}&mailbox_id={FB_PAGE_ID}"
             chat_or_inbox_url = chat_url or inbox_base_url
 
@@ -1093,7 +1286,7 @@ if orders_df is not None and prices_df is not None:
             )
 
             st.markdown("<div class='od-muted' style='margin-top:8px'><b>Ações</b></div>", unsafe_allow_html=True)
-            m1, m2, m3 = st.columns([1.2, 1.1, 1.5])
+            m1, m2, m3, m4 = st.columns([1.2, 1.1, 1.1, 1.5])
             msg_btn_key_base = f"msgtab_{client_selected}_{tpl_ver}"
             with m1:
                 st.components.v1.html(
@@ -1144,8 +1337,25 @@ if orders_df is not None and prices_df is not None:
                         key=f"open_inbox_msgtab_{msg_btn_key_base}",
                     )
             with m3:
-                st.components.v1.html(
-                    f"""
+                if profile_url:
+                    st.link_button(
+                        "ABRIR PERFIL",
+                        profile_url,
+                        use_container_width=True,
+                        key=f"open_profile_msgtab_{msg_btn_key_base}",
+                    )
+                else:
+                    st.link_button(
+                        "ABRIR PERFIL",
+                        "about:blank",
+                        use_container_width=True,
+                        disabled=True,
+                        key=f"open_profile_disabled_msgtab_{msg_btn_key_base}",
+                    )
+            with m4:
+                if chat_url:
+                    st.components.v1.html(
+                        f"""
 <div>
   <button id="copyopen_msgtab_{msg_btn_key_base}" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: inherit; cursor:pointer;">
     COPIAR + ABRIR CHAT
@@ -1175,8 +1385,45 @@ if orders_df is not None and prices_df is not None:
 }})();
 </script>
 """,
-                    height=90,
-                )
+                        height=90,
+                    )
+                else:
+                    st.link_button(
+                        "COPIAR + ABRIR CHAT",
+                        "about:blank",
+                        use_container_width=True,
+                        disabled=True,
+                        key=f"copyopen_disabled_msgtab_{msg_btn_key_base}",
+                    )
+
+            # Guardar/atualizar IDs no diretório (Sheets)
+            if st.session_state.get("use_clients_dir"):
+                with st.expander("Guardar IDs deste cliente (para reutilizar)", expanded=False):
+                    cur_ids = client_ids_map.get(client_selected, {})
+                    c_user = st.text_input("UserId", value=str(cur_ids.get("user_id") or ""), key=f"dir_user_{client_selected}")
+                    c_profile = st.text_input(
+                        "ProfileId (username)",
+                        value=str(cur_ids.get("profile_id") or ""),
+                        key=f"dir_profile_{client_selected}",
+                    )
+                    if st.button("Guardar no diretório (Sheets)", type="primary", key=f"save_dir_{client_selected}"):
+                        try:
+                            upsert_client_in_gsheets(
+                                spreadsheet_id=clients_sheet_id,
+                                worksheet_name=clients_sheet_tab,
+                                cliente=client_selected,
+                                user_id=c_user,
+                                profile_id=c_profile,
+                            )
+                            # Update current run map too
+                            client_ids_map[client_selected] = {
+                                "user_id": _normalize_fb_target(c_user),
+                                "profile_id": _normalize_fb_target(c_profile),
+                            }
+                            st.success("Guardado no diretório.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Falha ao guardar no diretório: {e}")
 
             st.divider()
             st.subheader("Texto final (todos os clientes)")
