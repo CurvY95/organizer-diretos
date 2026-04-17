@@ -326,6 +326,8 @@ st.session_state.setdefault("fill_missing_qty", True)
 st.session_state.setdefault("intro", "Oi! Segue o resumo da tua encomenda:")
 st.session_state.setdefault("total_line_template", "Total a pagar: {total}")
 st.session_state.setdefault("outro", "Obrigado!")
+st.session_state.setdefault("auto_sync_ids_db", True)
+st.session_state.setdefault("auto_save_history_db", True)
 
 currency = st.session_state.get("currency", "EUR")
 fill_missing_qty = bool(st.session_state.get("fill_missing_qty", True))
@@ -346,6 +348,8 @@ if nav == "Definições gerais":
         st.session_state["fill_missing_qty"] = st.checkbox("Se Quantidade estiver vazia, assumir 1", value=fill_missing_qty)
     with c2:
         st.markdown("<div class='od-card'><div class='od-muted'><b>Diretório (BD)</b></div><div class='od-small' style='margin-top:6px'>O app aprende e guarda UserId/ProfileId por cliente automaticamente.</div></div>", unsafe_allow_html=True)
+        st.session_state["auto_sync_ids_db"] = st.checkbox("Auto-sync IDs na BD (mais lento)", value=bool(st.session_state.get("auto_sync_ids_db", True)))
+        st.session_state["auto_save_history_db"] = st.checkbox("Auto-gravar histórico na BD (mais lento)", value=bool(st.session_state.get("auto_save_history_db", True)))
 
     st.divider()
     st.subheader("Mensagens")
@@ -952,16 +956,17 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                 f"{session_id}|{parsed_orders_fp}|{len(st.session_state.get('price_overrides') or {})}|"
                 f"{int(rows_for_db.shape[0])}"
             )
-            if st.session_state.get("last_db_snapshot_key") != snapshot_key:
-                odb.save_snapshot(
-                    db_con,
-                    session_id=session_id,
-                    created_at=created_at,
-                    label=label,
-                    source=source,
-                    merged_rows=merged_rows,
-                )
-                st.session_state["last_db_snapshot_key"] = snapshot_key
+            if bool(st.session_state.get("auto_save_history_db", True)):
+                if st.session_state.get("last_db_snapshot_key") != snapshot_key:
+                    odb.save_snapshot(
+                        db_con,
+                        session_id=session_id,
+                        created_at=created_at,
+                        label=label,
+                        source=source,
+                        merged_rows=merged_rows,
+                    )
+                    st.session_state["last_db_snapshot_key"] = snapshot_key
         except Exception as e:
             st.warning(f"DB: não consegui gravar histórico automaticamente: {e}")
 
@@ -1052,9 +1057,9 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
             if to_upsert:
                 sync_sig = "|".join([f"{n}::{u}::{p}" for n, u, p in sorted(to_upsert)])
                 if st.session_state.get("clients_db_last_sync") != sync_sig:
-                    for n, u, p in to_upsert:
-                        odb.upsert_customer_ids(db_con, cliente=n, user_id=u, profile_id=p)
-                    st.session_state["clients_db_last_sync"] = sync_sig
+                    if bool(st.session_state.get("auto_sync_ids_db", True)):
+                        odb.upsert_customer_ids_bulk(db_con, rows=to_upsert)
+                        st.session_state["clients_db_last_sync"] = sync_sig
         except Exception as e:
             st.warning(f"Diretório (BD): falha ao atualizar automaticamente: {e}")
 

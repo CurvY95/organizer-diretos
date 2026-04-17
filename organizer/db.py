@@ -294,6 +294,41 @@ def get_customer_ids(engine: Engine, *, cliente: str) -> dict[str, str]:
     }
 
 
+def upsert_customer_ids_bulk(engine: Engine, *, rows: list[tuple[str, str, str]]) -> int:
+    """
+    Bulk upsert of (cliente, user_id, profile_id) within a single transaction.
+    Returns number of updated rows requested.
+    """
+    rows = rows or []
+    if not rows:
+        return 0
+    tn = _table_names(engine)
+    customers = str(tn["customers"])
+    now = _utc_now_iso()
+    with engine.begin() as con:
+        for cliente, user_id, profile_id in rows:
+            cliente = str(cliente or "").strip()
+            if not cliente:
+                continue
+            _ensure_customer_row(con, cliente=cliente, customers_table=customers)
+            con.execute(
+                text(
+                    f"""
+                    UPDATE {customers}
+                    SET user_id = :user_id, profile_id = :profile_id, updated_at = :now
+                    WHERE cliente = :cliente;
+                    """
+                ),
+                {
+                    "user_id": (str(user_id or "").strip() or None),
+                    "profile_id": (str(profile_id or "").strip() or None),
+                    "now": now,
+                    "cliente": cliente,
+                },
+            )
+    return len(rows)
+
+
 def ensure_customer(engine: Engine, *, cliente: str) -> None:
     cliente = str(cliente or "").strip()
     if not cliente:
