@@ -2,152 +2,24 @@ import io
 import json
 import os
 import re
-from dataclasses import dataclass
 from typing import Optional
-import hashlib
-from datetime import datetime, timezone
 
 import pandas as pd
 import streamlit as st
-import tomllib
 
-try:
-    import gspread
-    from google.oauth2.service_account import Credentials
-except Exception:
-    gspread = None
-    Credentials = None
-
-
-@dataclass(frozen=True)
-class ParsedData:
-    orders: pd.DataFrame
-    prices: pd.DataFrame
-    merged: pd.DataFrame
-    missing_price_keys: pd.DataFrame
+from organizer import db as odb
+from organizer import core as oc
+from organizer import facebook as ofb
+from organizer import storage_local as osl
+from organizer import sessions_json as osj
+from organizer import utils as ou
+from organizer import clients_directory_gsheets as ogs
 
 
-REQUIRED_ORDERS_COLS = ["Cliente", "Produto", "Quantidade"]
-REQUIRED_PRICES_COLS = ["Produto", "Preco"]
-
-ORDERS_ALIASES = {
-    "Cliente": ["Cliente", "Nome", "NOME", "cliente", "name"],
-    "UserId": ["UserId", "UserID", "user_id", "USER_ID", "User ID", "ID", "id", "PSID", "psid"],
-    "ProfileId": ["ProfileId", "ProfileID", "profile_id", "PROFILE_ID", "Profile ID", "Username", "username", "user_name"],
-    "Produto": ["Produto", "Referência", "Referencia", "Referência ", "Ref", "REF", "produto", "ref"],
-    "Quantidade": ["Quantidade", "Qtd", "QTD", "quantidade", "qtd"],
-}
-
-PRICES_ALIASES = {
-    "Produto": ["Produto", "Ref", "REF", "Referência", "Referencia", "produto", "ref"],
-    "Preco": ["Preco", "Preço", "Preço/m", "Price/m", "UnitPrice", "unitprice", "preco", "price", "valor"],
-}
-
-
-def _normalize_col_name(c) -> str:
-    # Column names can arrive as float/NaN when reading some CSV/XLSX exports.
-    if c is None:
-        c = ""
-    try:
-        # pandas may use numpy.nan (float) for empty headers
-        if isinstance(c, float) and pd.isna(c):
-            c = ""
-    except Exception:
-        pass
-    c = str(c).strip()
-    c = re.sub(r"\s+", " ", c)
-    return c
-
-
-def _coerce_number_series(s: pd.Series) -> pd.Series:
-    if s is None:
-        return s
-    s2 = s.astype(str).str.strip()
-    s2 = s2.str.replace("\u00a0", " ", regex=False)  # non-breaking space
-
-    def normalize_one(x) -> str:
-        if x is None:
-            x = ""
-        try:
-            if isinstance(x, float) and pd.isna(x):
-                x = ""
-        except Exception:
-            pass
-        x = str(x).strip()
-        if x == "":
-            return ""
-        x = x.replace(" ", "")
-        x = re.sub(r"[^\d,.\-+]", "", x)
-        has_dot = "." in x
-        has_comma = "," in x
-        if has_dot and has_comma:
-            # Decide decimal separator by last occurrence.
-            if x.rfind(",") > x.rfind("."):
-                # 1.234,56 -> 1234.56
-                x = x.replace(".", "").replace(",", ".")
-            else:
-                # 1,234.56 -> 1234.56
-                x = x.replace(",", "")
-        elif has_comma and not has_dot:
-            x = x.replace(",", ".")
-        return x
-
-    s2 = s2.map(normalize_one)
-    return pd.to_numeric(s2, errors="coerce")
-
-
-def _standardize_df_columns(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    df.columns = [_normalize_col_name(c) for c in df.columns]
-    return df
-
-
-def _apply_aliases(df: pd.DataFrame, aliases: dict[str, list[str]]) -> pd.DataFrame:
-    df = df.copy()
-    cols = list(df.columns)
-    lower_map = {str(c).strip().lower(): c for c in cols}
-
-    rename: dict[str, str] = {}
-    for target, options in aliases.items():
-        if target in df.columns:
-            continue
-        found = None
-        for opt in options:
-            key = str(opt).strip().lower()
-            if key in lower_map:
-                found = lower_map[key]
-                break
-        if found is not None and found != target:
-            rename[found] = target
-
-    if rename:
-        df = df.rename(columns=rename)
-    return df
-
-
-def _validate_required_cols(df: pd.DataFrame, required: list[str], label: str) -> None:
-    missing = [c for c in required if c not in df.columns]
-    if missing:
-        raise ValueError(
-            f"{label}: faltam colunas obrigatórias: {', '.join(missing)}. "
-            f"Colunas encontradas: {', '.join(map(str, df.columns))}"
-        )
-
-
-def _detect_sheet(excel: pd.ExcelFile, kind: str) -> Optional[str]:
-    # Simple heuristics by sheet name.
-    candidates = excel.sheet_names
-    lowered = {name: name.lower() for name in candidates}
-
-    if kind == "orders":
-        keywords = ["encom", "pedido", "order", "orders", "clientes"]
-    else:
-        keywords = ["preco", "preços", "precos", "price", "prices", "produto", "produtos"]
-
-    for name, lname in lowered.items():
-        if any(k in lname for k in keywords):
-            return name
-    return candidates[0] if candidates else None
+ORDERS_ALIASES = oc.ORDERS_ALIASES
+PRICES_ALIASES = oc.PRICES_ALIASES
+REQUIRED_ORDERS_COLS = oc.REQUIRED_ORDERS_COLS
+REQUIRED_PRICES_COLS = oc.REQUIRED_PRICES_COLS
 
 
 def _load_from_xlsx(uploaded_file) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
@@ -183,351 +55,31 @@ def _load_from_csvs(orders_file, prices_file) -> tuple[pd.DataFrame, pd.DataFram
     return orders_df, prices_df
 
 
-def parse_inputs(
-    orders_df: pd.DataFrame,
-    prices_df: pd.DataFrame,
-    *,
-    fill_missing_quantity_with: Optional[float] = None,
-) -> ParsedData:
-    orders_df = _standardize_df_columns(orders_df)
-    prices_df = _standardize_df_columns(prices_df)
-
-    orders_df = _apply_aliases(orders_df, ORDERS_ALIASES)
-    prices_df = _apply_aliases(prices_df, PRICES_ALIASES)
-
-    _validate_required_cols(orders_df, REQUIRED_ORDERS_COLS, "Encomendas")
-    _validate_required_cols(prices_df, REQUIRED_PRICES_COLS, "Preços")
-
-    # Keep optional columns (e.g. UserId/ProfileId) for UI/actions, but enforce required subset.
-    keep_cols = REQUIRED_ORDERS_COLS.copy()
-    if "UserId" in orders_df.columns:
-        keep_cols.append("UserId")
-    if "ProfileId" in orders_df.columns:
-        keep_cols.append("ProfileId")
-
-    orders = orders_df[keep_cols].copy()
-    prices = prices_df[REQUIRED_PRICES_COLS].copy()
-
-    orders["Cliente"] = orders["Cliente"].astype(str).str.strip()
-    orders["Produto"] = orders["Produto"].astype(str).str.strip()
-    if "UserId" in orders.columns:
-        orders["UserId"] = orders["UserId"].astype(str).str.strip()
-    if "ProfileId" in orders.columns:
-        orders["ProfileId"] = orders["ProfileId"].astype(str).str.strip()
-    prices["Produto"] = prices["Produto"].astype(str).str.strip()
-
-    orders["Quantidade"] = _coerce_number_series(orders["Quantidade"])
-    prices["Preco"] = _coerce_number_series(prices["Preco"])
-
-    if fill_missing_quantity_with is not None:
-        orders["Quantidade"] = orders["Quantidade"].fillna(float(fill_missing_quantity_with))
-
-    if orders["Quantidade"].isna().any():
-        bad = orders[orders["Quantidade"].isna()][["Cliente", "Produto"]].head(20)
-        raise ValueError(
-            "Encomendas: encontrei valores inválidos em `Quantidade`. "
-            f"Exemplos (até 20):\n{bad.to_string(index=False)}"
-        )
-    if prices["Preco"].isna().any():
-        bad = prices[prices["Preco"].isna()][["Produto"]].head(20)
-        raise ValueError(
-            "Preços: encontrei valores inválidos em `Preco`. "
-            f"Exemplos (até 20):\n{bad.to_string(index=False)}"
-        )
-
-    # Normalize keys to avoid issues like " m81" vs "m81"
-    orders["ProdutoKey"] = orders["Produto"].astype(str).str.strip().str.lower()
-    prices["ProdutoKey"] = prices["Produto"].astype(str).str.strip().str.lower()
-
-    prices = prices.drop_duplicates(subset=["ProdutoKey"], keep="last")
-
-    merged = orders.merge(prices[["ProdutoKey", "Preco"]], on="ProdutoKey", how="left", validate="m:1")
-    merged["TotalItem"] = merged["Quantidade"] * merged["Preco"]
-
-    missing = (
-        merged[merged["Preco"].isna()][["ProdutoKey", "Produto"]]
-        .drop_duplicates()
-        .sort_values(["ProdutoKey"])
-        .reset_index(drop=True)
-    )
-
-    return ParsedData(orders=orders, prices=prices, merged=merged, missing_price_keys=missing)
-
-
-def apply_price_overrides(merged: pd.DataFrame, overrides: pd.DataFrame) -> pd.DataFrame:
-    """
-    overrides columns: ProdutoKey, Preco
-    """
-    merged = merged.copy()
-    if overrides is None or overrides.empty:
-        return merged
-    ov = overrides.copy()
-    ov["ProdutoKey"] = ov["ProdutoKey"].astype(str).str.strip().str.lower()
-    ov["Preco"] = _coerce_number_series(ov["Preco"])
-    ov = ov.dropna(subset=["ProdutoKey", "Preco"]).drop_duplicates(subset=["ProdutoKey"], keep="last")
-
-    merged = merged.merge(ov[["ProdutoKey", "Preco"]].rename(columns={"Preco": "PrecoOverride"}), on="ProdutoKey", how="left")
-    merged["Preco"] = merged["PrecoOverride"].combine_first(merged["Preco"])
-    merged = merged.drop(columns=["PrecoOverride"])
-    merged["TotalItem"] = merged["Quantidade"] * merged["Preco"]
-    return merged
-
-
-def build_summary(merged: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
-    by_client = (
-        merged.groupby(["Cliente"], dropna=False, as_index=False)
-        .agg(
-            Total=("TotalItem", "sum"),
-        )
-        .sort_values(["Cliente"])
-    )
-    detail_map: dict[str, pd.DataFrame] = {}
-    for client, g in merged.groupby("Cliente", dropna=False):
-        g2 = (
-            g.groupby(["Produto"], as_index=False)
-            .agg(
-                Quantidade=("Quantidade", "sum"),
-                Preco=("Preco", "max"),
-                TotalItem=("TotalItem", "sum"),
-            )
-            .sort_values(["Produto"])
-        )
-        detail_map[str(client)] = g2
-    return by_client, detail_map
-
-
-def format_currency(v: float, currency: str) -> str:
-    if currency.upper() == "EUR":
-        s = f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        return f"{s} €"
-    if currency.upper() == "BRL":
-        s = f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        return f"R$ {s}"
-    return f"{v:.2f} {currency}"
-
-
-def build_message(
-    client: str,
-    details: pd.DataFrame,
-    total: float,
-    currency: str,
-    intro: str,
-    outro: str,
-) -> str:
-    lines: list[str] = []
-    if intro.strip():
-        lines.append(intro.strip())
-    lines.append(f"{client}:")
-    for _, row in details.iterrows():
-        q = row["Quantidade"]
-        p = row["Preco"]
-        t = row["TotalItem"]
-        q_str = f"{q:g}"
-        lines.append(f"- {row['Produto']} — {q_str} x {format_currency(float(p), currency)} = {format_currency(float(t), currency)}")
-    lines.append(f"Total: {format_currency(float(total), currency)}")
-    if outro.strip():
-        lines.append(outro.strip())
-    return "\n".join(lines).strip() + "\n"
-
-
-def load_local_state(path: str) -> dict:
-    try:
-        if not os.path.exists(path):
-            return {}
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f) or {}
-    except Exception:
-        return {}
-
-
-def save_local_state(path: str, data: dict) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, path)
-
-
-def stable_orders_fingerprint(orders: pd.DataFrame) -> str:
-    cols = ["Cliente", "Produto", "Quantidade"]
-    df = orders[cols].copy()
-    df["Cliente"] = df["Cliente"].astype(str).str.strip()
-    df["Produto"] = df["Produto"].astype(str).str.strip().str.lower()
-    df["Quantidade"] = pd.to_numeric(df["Quantidade"], errors="coerce").fillna(0)
-    df = df.sort_values(cols).reset_index(drop=True)
-    payload = df.to_csv(index=False).encode("utf-8")
-    import hashlib
-
-    return hashlib.sha256(payload).hexdigest()[:16]
-
-
-def template_version(intro: str, total_line_template: str, outro: str) -> str:
-    payload = (intro or "") + "\n" + (total_line_template or "") + "\n" + (outro or "")
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:8]
-
-
-SESSIONS_DIR = os.path.join(os.getcwd(), "saved", "sessions")
-FB_PAGE_ID = "106851297526135"
-
-
-def _normalize_fb_target(v: str) -> str:
-    s = str(v or "").strip()
-    # Some CSV/Excel imports turn large numeric IDs into floats like "100023...332.0"
-    s = re.sub(r"^(\d{5,})\.0$", r"\1", s)
-    if s.lower() == "nan":
-        return ""
-    return s
-
-
-def _load_toml_if_exists(path: str) -> dict:
-    try:
-        if not os.path.exists(path):
-            return {}
-        with open(path, "rb") as f:
-            return tomllib.load(f) or {}
-    except Exception:
-        return {}
-
-
-def _get_gsheets_service_account_info() -> Optional[dict]:
-    # Prefer Streamlit secrets (works in Streamlit Cloud).
-    secrets = getattr(st, "secrets", {}) or {}
-    if hasattr(secrets, "get"):
-        info = secrets.get("GSHEETS_SERVICE_ACCOUNT")
-        if isinstance(info, dict) and info:
-            return info
-
-    # Local dev fallback: .streamlit/secrets.toml
-    local_secrets = _load_toml_if_exists(os.path.join(os.getcwd(), ".streamlit", "secrets.toml"))
-    info = (local_secrets.get("GSHEETS_SERVICE_ACCOUNT") or {}) if isinstance(local_secrets, dict) else {}
-    return info if isinstance(info, dict) and info else None
-
-
-def _get_gsheets_client():
-    if gspread is None or Credentials is None:
-        raise RuntimeError("Dependências do Google Sheets não instaladas (gspread/google-auth).")
-
-    info = _get_gsheets_service_account_info()
-    if not info:
-        raise RuntimeError(
-            "Credenciais do Google Sheets não configuradas. "
-            "Defina `GSHEETS_SERVICE_ACCOUNT` em `st.secrets` (ou em `.streamlit/secrets.toml`)."
-        )
-
-    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds = Credentials.from_service_account_info(info, scopes=scopes)
-    return gspread.authorize(creds)
-
-
-@st.cache_data(show_spinner=False, ttl=60)
-def _load_clients_directory_from_gsheets(spreadsheet_id: str, worksheet_name: str) -> dict[str, dict[str, str]]:
-    """
-    Returns map: Cliente -> {user_id, profile_id}
-    Expected columns: Cliente | UserId | ProfileId | updated_at (headers in row 1)
-    """
-    spreadsheet_id = str(spreadsheet_id or "").strip()
-    worksheet_name = str(worksheet_name or "").strip()
-    if not spreadsheet_id or not worksheet_name:
-        return {}
-
-    gc = _get_gsheets_client()
-    sh = gc.open_by_key(spreadsheet_id)
-    ws = sh.worksheet(worksheet_name)
-
-    rows = ws.get_all_records() or []
-    out: dict[str, dict[str, str]] = {}
-    for r in rows:
-        name = str(r.get("Cliente") or "").strip()
-        if not name:
-            continue
-        out[name] = {
-            "user_id": _normalize_fb_target(r.get("UserId") or ""),
-            "profile_id": _normalize_fb_target(r.get("ProfileId") or ""),
-        }
-    return out
-
-
-def _ensure_clients_sheet_headers(ws) -> None:
-    # Ensure row 1 has expected headers (idempotent).
-    headers = ws.row_values(1) or []
-    expected = ["Cliente", "UserId", "ProfileId", "updated_at"]
-    if [h.strip() for h in headers[: len(expected)]] != expected:
-        ws.update("A1:D1", [expected])
-
-
-def upsert_client_in_gsheets(*, spreadsheet_id: str, worksheet_name: str, cliente: str, user_id: str, profile_id: str) -> None:
-    spreadsheet_id = str(spreadsheet_id or "").strip()
-    worksheet_name = str(worksheet_name or "").strip()
-    cliente = str(cliente or "").strip()
-    if not spreadsheet_id or not worksheet_name:
-        raise ValueError("Spreadsheet ID / worksheet não definidos.")
-    if not cliente:
-        raise ValueError("Cliente vazio.")
-
-    gc = _get_gsheets_client()
-    sh = gc.open_by_key(spreadsheet_id)
-    ws = sh.worksheet(worksheet_name)
-    _ensure_clients_sheet_headers(ws)
-
-    user_id = _normalize_fb_target(user_id)
-    profile_id = _normalize_fb_target(profile_id)
-
-    # Find existing row by exact Cliente (column A).
-    # Note: gspread find searches all cells; limit to column A for speed.
-    col_a = ws.col_values(1) or []
-    row_idx = None
-    for i, v in enumerate(col_a[1:], start=2):  # skip header
-        if str(v).strip() == cliente:
-            row_idx = i
-            break
-
-    updated_at = now_iso()
-    if row_idx is None:
-        ws.append_row([cliente, user_id, profile_id, updated_at], value_input_option="RAW")
-    else:
-        ws.update(f"A{row_idx}:D{row_idx}", [[cliente, user_id, profile_id, updated_at]])
-
-    # Invalidate cache so UI refreshes quickly.
-    _load_clients_directory_from_gsheets.clear()
-
-
-def build_facebook_chat_url(user_id: str = "", profile_id: str = "") -> str:
-    user_id = _normalize_fb_target(user_id)
-    profile_id = _normalize_fb_target(profile_id)
-
-    # Prefer numeric IDs (UserID) over usernames (ProfileID).
-    def is_numeric_id(v: str) -> bool:
-        return bool(re.fullmatch(r"\d{5,}", v or ""))
-
-    target = ""
-    if is_numeric_id(user_id):
-        target = user_id
-    elif is_numeric_id(profile_id):
-        target = profile_id
-    else:
-        target = user_id or profile_id
-    if not target:
-        return ""
-
-    return (
-        f"https://business.facebook.com/latest/inbox/all/?asset_id={FB_PAGE_ID}&mailbox_id={FB_PAGE_ID}"
-        f"&selected_item_id={target}&thread_type=FB_MESSAGE"
-    )
-
-
-def build_facebook_profile_url(user_id: str = "", profile_id: str = "") -> str:
-    user_id = _normalize_fb_target(user_id)
-    profile_id = _normalize_fb_target(profile_id)
-
-    # If we have a numeric id, open the canonical profile.php.
-    if re.fullmatch(r"\d{5,}", user_id or ""):
-        return f"https://www.facebook.com/profile.php?id={user_id}"
-
-    # Otherwise try username / profile handle.
-    if profile_id:
-        return f"https://www.facebook.com/{profile_id}"
-
-    return ""
+_coerce_number_series = oc.coerce_number_series
+_standardize_df_columns = oc.standardize_df_columns
+_apply_aliases = oc.apply_aliases
+_validate_required_cols = oc.validate_required_cols
+_detect_sheet = oc.detect_sheet
+
+parse_inputs = oc.parse_inputs
+apply_price_overrides = oc.apply_price_overrides
+build_summary = oc.build_summary
+format_currency = oc.format_currency
+build_message = oc.build_message
+stable_orders_fingerprint = oc.stable_orders_fingerprint
+
+load_local_state = osl.load_local_state
+save_local_state = osl.save_local_state
+
+FB_PAGE_ID = ofb.FB_PAGE_ID
+_normalize_fb_target = ofb.normalize_fb_target
+build_facebook_chat_url = ofb.build_facebook_chat_url
+build_facebook_profile_url = ofb.build_facebook_profile_url
+
+_load_clients_directory_from_gsheets = ogs.load_clients_directory
+upsert_client_in_gsheets = ogs.upsert_client
+
+template_version = ou.template_version
 
 
 def require_login() -> None:
@@ -568,81 +120,28 @@ def require_login() -> None:
     st.stop()
 
 
-def now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+now_iso = ou.now_iso
+safe_session_id = ou.safe_session_id
 
-
-def safe_session_id(ts_iso: str) -> str:
-    return ts_iso.replace(":", "").replace("-", "").replace("+", "Z")
-
-
-def list_sessions() -> list[dict]:
-    if not os.path.isdir(SESSIONS_DIR):
-        return []
-    out: list[dict] = []
-    for name in os.listdir(SESSIONS_DIR):
-        if not name.endswith(".json"):
-            continue
-        path = os.path.join(SESSIONS_DIR, name)
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f) or {}
-            out.append(
-                {
-                    "id": data.get("id") or name.replace(".json", ""),
-                    "created_at": data.get("created_at") or "",
-                    "label": data.get("label") or "",
-                    "path": path,
-                    "orders_rows": int(data.get("orders_rows") or 0),
-                    "refs": int(data.get("refs") or 0),
-                }
-            )
-        except Exception:
-            continue
-    out.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-    return out
-
-
-def save_session(*, label: str, orders_for_calc: pd.DataFrame, price_overrides: dict, meta: dict) -> str:
-    os.makedirs(SESSIONS_DIR, exist_ok=True)
-    created_at = now_iso()
-    sid = safe_session_id(created_at)
-    path = os.path.join(SESSIONS_DIR, f"{sid}.json")
-
-    orders_clean = orders_for_calc.copy()
-    orders_clean = _standardize_df_columns(orders_clean)
-    orders_clean = _apply_aliases(orders_clean, ORDERS_ALIASES)
-    orders_clean = orders_clean[REQUIRED_ORDERS_COLS].copy()
-
-    refs = int(orders_clean["Produto"].astype(str).str.strip().str.lower().nunique())
-
-    payload = {
-        "id": sid,
-        "created_at": created_at,
-        "label": label,
-        "meta": meta or {},
-        "orders_rows": int(orders_clean.shape[0]),
-        "refs": refs,
-        "orders": orders_clean.to_dict(orient="records"),
-        "price_overrides": price_overrides or {},
-    }
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
-    return sid
-
-
-def load_session(session_path: str) -> dict:
-    with open(session_path, "r", encoding="utf-8") as f:
-        return json.load(f) or {}
-
-
-def delete_session(session_path: str) -> None:
-    os.remove(session_path)
+list_sessions = osj.list_sessions
+save_session = osj.save_session
+load_session = osj.load_session
+delete_session = osj.delete_session
 
 
 st.set_page_config(page_title="Organizer Diretos", layout="wide", page_icon="🧾")
 
 require_login()
+
+
+@st.cache_resource
+def _get_db():
+    con = odb.connect()
+    odb.init_db(con)
+    return con
+
+
+db_con = _get_db()
 
 st.markdown(
     """
@@ -727,48 +226,172 @@ orders_source_label = None
 tab_main, tab_history = st.tabs(["Trabalho atual", "Histórico"])
 
 with tab_history:
-    st.subheader("Histórico de sessões")
-    sessions = list_sessions()
-    if not sessions:
-        st.info("Ainda não há sessões guardadas.")
-    else:
-        sessions_df = pd.DataFrame(sessions)[["created_at", "label", "orders_rows", "refs", "path"]]
-        sessions_df = sessions_df.rename(
-            columns={
-                "created_at": "Data (UTC)",
-                "label": "Nome",
-                "orders_rows": "Linhas",
-                "refs": "Referências",
-                "path": "Arquivo",
-            }
-        )
-        st.dataframe(sessions_df.drop(columns=["Arquivo"]), use_container_width=True)
+    st.subheader("Histórico")
+    htab_sessions, htab_clients = st.tabs(["Sessões (JSON)", "Clientes (DB)"])
 
-        chosen = st.selectbox(
-            "Abrir sessão",
-            options=sessions,
-            format_func=lambda s: f"{s['created_at']} — {s['label'] or s['id']}",
-        )
-        c1, c2 = st.columns([1, 1])
-        with c1:
-            if st.button("Abrir", type="primary"):
-                data = load_session(chosen["path"])
-                st.session_state["loaded_session"] = data
-                st.success("Sessão carregada. Vá à aba 'Trabalho atual'.")
-        with c2:
-            with st.popover("Apagar sessão"):
-                st.warning("Isto apaga a sessão localmente (não dá para recuperar).")
-                confirm = st.checkbox("Confirmo que quero apagar", value=False, key="confirm_delete_session")
-                if st.button("Apagar definitivamente", type="secondary", disabled=not confirm):
+    with htab_clients:
+        st.caption("Histórico persistente (base de dados). Aqui consegues ver o que cada pessoa comprou em diretos anteriores.")
+        try:
+            customers = odb.list_customers(db_con)
+        except Exception as e:
+            customers = []
+            st.error(f"DB: falha ao listar clientes: {e}")
+
+        if not customers:
+            st.info("Ainda não há histórico na base de dados. Gere um direto e o app grava automaticamente.")
+        else:
+            search = st.text_input("Pesquisar cliente", value="", placeholder="Escreve parte do nome…", key="hist_cliente_search")
+            filtered = customers
+            if search.strip():
+                s = search.strip().lower()
+                filtered = [c for c in customers if s in c.lower()]
+            cliente_h = st.selectbox("Cliente", options=filtered or customers, key="hist_cliente_pick")
+
+            # Customer meta (notes/tags)
+            try:
+                meta = odb.get_customer_meta(db_con, cliente=cliente_h)
+            except Exception as e:
+                meta = {"notes": "", "tags": ""}
+                st.warning(f"DB: não consegui carregar notas/tags: {e}")
+
+            st.markdown("<div class='od-muted'><b>Perfil do cliente</b></div>", unsafe_allow_html=True)
+            m1, m2 = st.columns([2, 1])
+            with m1:
+                notes = st.text_area("Notas internas", value=str(meta.get("notes") or ""), height=140, key="cust_notes")
+                tags = st.text_input("Tags (separadas por vírgula)", value=str(meta.get("tags") or ""), key="cust_tags")
+                if st.button("Guardar perfil", type="primary", key="save_cust_profile"):
                     try:
-                        delete_session(chosen["path"])
-                        loaded = st.session_state.get("loaded_session") or {}
-                        if loaded.get("id") == chosen.get("id"):
-                            st.session_state.pop("loaded_session", None)
-                        st.success("Sessão apagada.")
-                        st.rerun()
+                        odb.upsert_customer_meta(db_con, cliente=cliente_h, notes=notes, tags=tags)
+                        st.success("Perfil guardado.")
                     except Exception as e:
-                        st.error(f"Falha ao apagar: {e}")
+                        st.error(f"Falha ao guardar perfil: {e}")
+            with m2:
+                try:
+                    stats = odb.customer_stats(db_con, cliente=cliente_h)
+                except Exception as e:
+                    stats = {"sessions_count": 0, "items_count": 0, "total_spent": 0.0, "last_session_at": ""}
+                    st.warning(f"DB: falha ao calcular stats: {e}")
+                st.metric("Diretos", int(stats.get("sessions_count") or 0))
+                st.metric("Itens", int(stats.get("items_count") or 0))
+                # Total spent is only meaningful when items had prices at the time of snapshot.
+                st.metric("Total (com preço)", format_currency(float(stats.get("total_spent") or 0.0), currency))
+                if stats.get("last_session_at"):
+                    st.caption(f"Último direto: `{stats.get('last_session_at')}`")
+
+            st.divider()
+            ct1, ct2 = st.columns(2)
+            with ct1:
+                st.markdown("<div class='od-muted'><b>Top produtos</b></div>", unsafe_allow_html=True)
+                try:
+                    top = odb.customer_top_products(db_con, cliente=cliente_h, limit=50)
+                    st.dataframe(pd.DataFrame(top), use_container_width=True)
+                except Exception as e:
+                    st.error(f"DB: falha ao listar top produtos: {e}")
+            with ct2:
+                st.markdown("<div class='od-muted'><b>Diretos anteriores</b></div>", unsafe_allow_html=True)
+                try:
+                    sess = odb.customer_sessions(db_con, cliente=cliente_h, limit=50)
+                    st.dataframe(pd.DataFrame(sess), use_container_width=True)
+                except Exception as e:
+                    st.error(f"DB: falha ao listar sessões: {e}")
+
+            st.divider()
+            st.markdown("<div class='od-muted'><b>Linhas (histórico completo)</b></div>", unsafe_allow_html=True)
+            try:
+                hist_rows = odb.customer_history(db_con, cliente=cliente_h)
+                st.dataframe(pd.DataFrame(hist_rows), use_container_width=True)
+            except Exception as e:
+                st.error(f"DB: falha ao buscar histórico: {e}")
+
+    with htab_sessions:
+        st.subheader("Histórico de sessões")
+        sessions = list_sessions()
+        if not sessions:
+            st.info("Ainda não há sessões guardadas.")
+        else:
+            sessions_df = pd.DataFrame(sessions)[["created_at", "label", "orders_rows", "refs", "path"]]
+            sessions_df = sessions_df.rename(
+                columns={
+                    "created_at": "Data (UTC)",
+                    "label": "Nome",
+                    "orders_rows": "Linhas",
+                    "refs": "Referências",
+                    "path": "Arquivo",
+                }
+            )
+            st.dataframe(sessions_df.drop(columns=["Arquivo"]), use_container_width=True)
+
+            st.divider()
+            st.subheader("Migrar sessões (JSON) → Base de dados")
+            st.caption("Importa as sessões antigas para a BD. Se uma sessão já existir na BD, é ignorada.")
+            if st.button("Migrar tudo para a BD", type="primary", key="migrate_json_to_db"):
+                migrated = 0
+                skipped = 0
+                failed = 0
+                for s in sessions:
+                    try:
+                        sid = str(s.get("id") or "").strip()
+                        if not sid:
+                            skipped += 1
+                            continue
+                        if odb.session_exists(db_con, session_id=sid):
+                            skipped += 1
+                            continue
+                        data = load_session(s["path"])
+                        created_at = str(data.get("created_at") or s.get("created_at") or "")
+                        label = str(data.get("label") or s.get("label") or "")
+                        source = str((data.get("meta") or {}).get("source") or "")
+                        rows = []
+                        for r in (data.get("orders") or []):
+                            rows.append(
+                                {
+                                    "Cliente": str(r.get("Cliente") or ""),
+                                    "Produto": str(r.get("Produto") or ""),
+                                    "Quantidade": float(r.get("Quantidade") or 0.0),
+                                    "Comentario": (str(r.get("Comentario")) if r.get("Comentario") is not None else None),
+                                    # prices not available in JSON sessions
+                                    "Preco": None,
+                                    "TotalItem": None,
+                                }
+                            )
+                        odb.save_snapshot(
+                            db_con,
+                            session_id=sid,
+                            created_at=created_at or now_iso(),
+                            label=label or "Sessão",
+                            source=source,
+                            merged_rows=rows,
+                        )
+                        migrated += 1
+                    except Exception:
+                        failed += 1
+                st.success(f"Migração concluída. Migradas: {migrated} | Ignoradas: {skipped} | Falhas: {failed}")
+
+            chosen = st.selectbox(
+                "Abrir sessão",
+                options=sessions,
+                format_func=lambda s: f"{s['created_at']} — {s['label'] or s['id']}",
+            )
+            c1, c2 = st.columns([1, 1])
+            with c1:
+                if st.button("Abrir", type="primary"):
+                    data = load_session(chosen["path"])
+                    st.session_state["loaded_session"] = data
+                    st.success("Sessão carregada. Vá à aba 'Trabalho atual'.")
+            with c2:
+                with st.popover("Apagar sessão"):
+                    st.warning("Isto apaga a sessão localmente (não dá para recuperar).")
+                    confirm = st.checkbox("Confirmo que quero apagar", value=False, key="confirm_delete_session")
+                    if st.button("Apagar definitivamente", type="secondary", disabled=not confirm):
+                        try:
+                            delete_session(chosen["path"])
+                            loaded = st.session_state.get("loaded_session") or {}
+                            if loaded.get("id") == chosen.get("id"):
+                                st.session_state.pop("loaded_session", None)
+                            st.success("Sessão apagada.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Falha ao apagar: {e}")
 
 with tab_main:
     # If a session was loaded, we can work without uploading again.
@@ -817,9 +440,53 @@ with tab_main:
 
 if orders_df is not None and prices_df is not None:
     try:
-        tab_upload, tab_prices, tab_summary, tab_messages = st.tabs(
-            ["1) Encomendas (Comments)", "2) Preços", "3) Resumo", "4) Mensagens"]
+        tab_comments, tab_upload, tab_prices, tab_summary, tab_messages = st.tabs(
+            ["0) Comentários", "1) Encomendas (Comments)", "2) Preços", "3) Resumo", "4) Mensagens"]
         )
+
+        with tab_comments:
+            st.subheader("Comentários (texto original)")
+            st.caption("Mostra o comentário real captado no Tampermonkey, se vier no Excel/CSV.")
+
+            orders_view = _standardize_df_columns(orders_df)
+            orders_view = _apply_aliases(orders_view, ORDERS_ALIASES)
+            _validate_required_cols(orders_view, REQUIRED_ORDERS_COLS, "Encomendas (Comments)")
+
+            cols = ["Cliente"]
+            if "UserId" in orders_view.columns:
+                cols.append("UserId")
+            if "ProfileId" in orders_view.columns:
+                cols.append("ProfileId")
+            cols += ["Produto", "Quantidade"]
+            if "Comentario" in orders_view.columns:
+                cols.append("Comentario")
+
+            view = orders_view[cols].copy()
+            view["Cliente"] = view["Cliente"].astype(str).str.strip()
+            view["Produto"] = view["Produto"].astype(str).str.strip()
+            if "Comentario" in view.columns:
+                view["Comentario"] = view["Comentario"].astype(str)
+
+            if "Comentario" not in view.columns:
+                st.info("Não encontrei coluna de comentário no ficheiro. (Procurei: Comentário/Comment/Mensagem/OBS/Notas)")
+            else:
+                clients = sorted(view["Cliente"].dropna().astype(str).unique().tolist())
+                client_c = st.selectbox("Cliente", options=clients, key="comments_client_pick")
+                vc = view[view["Cliente"].astype(str) == str(client_c)].copy()
+
+                # Aggregate comments (some exports repeat per row)
+                raw_comments = (
+                    vc["Comentario"]
+                    .dropna()
+                    .astype(str)
+                    .map(lambda s: s.strip())
+                    .replace({"nan": "", "None": ""})
+                )
+                raw_comments = [c for c in raw_comments.tolist() if c]
+                combined = "\n\n---\n\n".join(dict.fromkeys(raw_comments)).strip()
+
+                st.text_area("Comentário(s)", value=combined or "—", height=200, disabled=True, key="comments_text")
+                st.dataframe(vc, use_container_width=True)
 
         with tab_upload:
             st.subheader("Encomendas")
@@ -987,6 +654,52 @@ if orders_df is not None and prices_df is not None:
             [{"ProdutoKey": k, "Preco": v} for k, v in st.session_state["price_overrides"].items()]
         )
         merged = apply_price_overrides(parsed.merged, overrides_df)
+
+        # Stable "direto session id" for DB snapshots: reuse loaded session id when available,
+        # otherwise create one per run and keep it in session_state.
+        if "history_session_id" not in st.session_state:
+            loaded = st.session_state.get("loaded_session") or {}
+            st.session_state["history_session_id"] = loaded.get("id") or safe_session_id(now_iso())
+
+        # Persist snapshot in DB (only rows with price, so history reflects what was actually billed).
+        try:
+            rows_for_db = merged.dropna(subset=["Preco"]).copy()
+            # Attach optional comment if present in the original orders
+            orders_std = _standardize_df_columns(orders_for_calc)
+            orders_std = _apply_aliases(orders_std, ORDERS_ALIASES)
+            if "Comentario" in orders_std.columns:
+                comm_map = (
+                    orders_std[["Cliente", "Comentario"]]
+                    .dropna(subset=["Cliente"])
+                    .assign(Cliente=lambda d: d["Cliente"].astype(str).str.strip())
+                )
+                # For repeated rows, keep last non-empty comment.
+                comm_map["Comentario"] = comm_map["Comentario"].astype(str).map(lambda s: s.strip())
+                comm_map = comm_map[comm_map["Comentario"] != ""]
+                comm_dict = {r["Cliente"]: r["Comentario"] for _, r in comm_map.iterrows()}
+                rows_for_db["Comentario"] = rows_for_db["Cliente"].astype(str).map(lambda c: comm_dict.get(str(c).strip(), ""))
+
+            # Build minimal payload
+            payload = rows_for_db[["Cliente", "Produto", "Quantidade", "Preco", "TotalItem"]].copy()
+            if "Comentario" in rows_for_db.columns:
+                payload["Comentario"] = rows_for_db["Comentario"]
+            merged_rows = payload.to_dict(orient="records")
+
+            session_id = str(st.session_state["history_session_id"])
+            created_at = (st.session_state.get("history_created_at") or now_iso())
+            st.session_state["history_created_at"] = created_at
+            label = (st.session_state.get("session_label") or "").strip() or "Direto"
+            source = orders_source_label or ""
+            odb.save_snapshot(
+                db_con,
+                session_id=session_id,
+                created_at=created_at,
+                label=label,
+                source=source,
+                merged_rows=merged_rows,
+            )
+        except Exception as e:
+            st.warning(f"DB: não consegui gravar histórico automaticamente: {e}")
 
         still_missing = merged[merged["Preco"].isna()][["ProdutoKey", "Produto"]].drop_duplicates()
         if not still_missing.empty:
