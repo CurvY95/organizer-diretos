@@ -141,13 +141,40 @@ require_login()
 
 
 @st.cache_resource
-def _get_db():
+def _get_db(_cache_bust: str):
     con = odb.connect()
     odb.init_db(con)
     return con
 
 
-db_con = _get_db()
+def _db_cache_bust_key() -> str:
+    # Make DB connection cache sensitive to secrets/env changes.
+    try:
+        secrets = getattr(st, "secrets", {}) or {}
+        _ = len(secrets) if hasattr(secrets, "__len__") else 0
+    except Exception:
+        secrets = {}
+
+    db_url = ""
+    schema = ""
+    if hasattr(secrets, "get"):
+        db_url = str(secrets.get("DATABASE_URL") or "").strip()
+        schema = str(secrets.get("DB_SCHEMA") or "").strip()
+    db_url = db_url or str(os.getenv("DATABASE_URL") or "").strip()
+    schema = schema or str(os.getenv("DB_SCHEMA") or "").strip()
+    return f"{schema}|{db_url}"
+
+
+try:
+    db_con = _get_db(_db_cache_bust_key())
+except Exception as e:
+    st.error("Falha a ligar à base de dados (Supabase/Postgres).")
+    st.caption(
+        "No Streamlit Cloud isto costuma ser: URL/pooler errado, password errada, ou password com caracteres "
+        "especiais sem URL-encode. Usa o Transaction pooler (porta 6543) e `sslmode=require`."
+    )
+    st.caption(f"Detalhe: `{type(e).__name__}`")
+    st.stop()
 
 st.markdown(
     """
