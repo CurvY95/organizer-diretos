@@ -23,6 +23,7 @@ ORDERS_ALIASES = {
     "ProfileId": ["ProfileId", "ProfileID", "profile_id", "PROFILE_ID", "Profile ID", "Username", "username", "user_name"],
     "Produto": ["Produto", "Referência", "Referencia", "Referência ", "Ref", "REF", "produto", "ref"],
     "Quantidade": ["Quantidade", "Qtd", "QTD", "quantidade", "qtd"],
+    "Hora": ["Hora", "hora", "Time", "time", "Horário", "Horario", "DataHora", "Data Hora", "Timestamp", "timestamp"],
     # Tampermonkey / exports often include the raw user message / comment.
     "Comentario": [
         "Comentario",
@@ -168,7 +169,7 @@ def parse_inputs(
     validate_required_cols(prices_df, REQUIRED_PRICES_COLS, "Preços")
 
     keep_cols = REQUIRED_ORDERS_COLS.copy()
-    for opt in ["UserId", "ProfileId", "Comentario"]:
+    for opt in ["UserId", "ProfileId", "Hora", "Comentario"]:
         if opt in orders_df.columns:
             keep_cols.append(opt)
 
@@ -181,6 +182,8 @@ def parse_inputs(
         orders["UserId"] = orders["UserId"].astype(str).str.strip()
     if "ProfileId" in orders.columns:
         orders["ProfileId"] = orders["ProfileId"].astype(str).str.strip()
+    if "Hora" in orders.columns:
+        orders["Hora"] = orders["Hora"].astype(str).str.strip()
     if "Comentario" in orders.columns:
         orders["Comentario"] = orders["Comentario"].astype(str)
 

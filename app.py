@@ -249,6 +249,24 @@ st.markdown(
 
   /* tabs spacing */
   [data-testid="stTabs"] { margin-top: 6px; }
+
+  /* sidebar / navbar */
+  section[data-testid="stSidebar"] > div {
+    padding-top: 0.9rem;
+  }
+  .od-nav {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 16px;
+    padding: 12px 12px 10px 12px;
+    margin-bottom: 10px;
+  }
+  .od-nav-title { font-weight: 800; letter-spacing: -0.02em; font-size: 1.05rem; }
+  .od-nav-sub { margin-top: 4px; }
+  .od-nav ul { list-style: none; padding-left: 0; margin: 10px 0 0 0; }
+  .od-nav li { padding: 6px 8px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); margin-bottom: 8px; }
+  .od-nav li:last-child { margin-bottom: 0; }
+  .od-nav li b { font-weight: 750; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -274,42 +292,68 @@ with col_b:
 STATE_PATH = os.path.join(os.getcwd(), "saved", "organizer_state.json")
 
 with st.sidebar:
-    st.header("Configurações")
+    st.markdown(
+        """
+<div class="od-nav">
+  <div class="od-nav-title">Organizer Diretos</div>
+  <div class="od-nav-sub od-muted">Menu</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    nav = st.radio(
+        "Navegação",
+        options=["Trabalho atual", "Etiquetas 10×15", "Histórico", "Definições gerais"],
+        index=0,
+        label_visibility="collapsed",
+        key="nav_page",
+    )
+
+    st.divider()
+    st.header("Conta")
     if st.session_state.get("authenticated") is True:
         if st.button("Sair"):
             st.session_state["authenticated"] = False
             st.session_state.pop("loaded_session", None)
             st.rerun()
 
-    st.markdown("<div class='od-muted'><b>1) Importação</b></div>", unsafe_allow_html=True)
-    st.caption("Usa a aba `Comments` (ou semelhante).")
-
-    st.markdown("<div class='od-muted' style='margin-top:10px'><b>2) Preferências</b></div>", unsafe_allow_html=True)
-    currency = st.selectbox("Moeda", options=["EUR", "BRL", "USD"], index=0)
-
-    fill_missing_qty = st.checkbox("Se Quantidade estiver vazia, assumir 1", value=True)
-
-    st.markdown("<div class='od-muted' style='margin-top:10px'><b>3) Mensagens</b></div>", unsafe_allow_html=True)
-    intro = st.text_input("Introdução", value="Oi! Segue o resumo da tua encomenda:")
-    total_line_template = st.text_area(
-        "Linha com total (use {total})",
-        value="Total a pagar: {total}",
-        height=70,
-    )
-    outro = st.text_input("Fecho", value="Obrigado!")
-
-    st.markdown("<div class='od-muted' style='margin-top:10px'><b>4) Diretório (BD)</b></div>", unsafe_allow_html=True)
-    st.caption("O app aprende e guarda IDs por cliente automaticamente.")
-
 st.divider()
+
+# Defaults for "Definições gerais"
+st.session_state.setdefault("currency", "EUR")
+st.session_state.setdefault("fill_missing_qty", True)
+st.session_state.setdefault("intro", "Oi! Segue o resumo da tua encomenda:")
+st.session_state.setdefault("total_line_template", "Total a pagar: {total}")
+st.session_state.setdefault("outro", "Obrigado!")
+
+currency = st.session_state.get("currency", "EUR")
+fill_missing_qty = bool(st.session_state.get("fill_missing_qty", True))
+intro = st.session_state.get("intro", "")
+total_line_template = st.session_state.get("total_line_template", "")
+outro = st.session_state.get("outro", "")
 
 orders_df = None
 prices_df = None
 orders_source_label = None
 
-tab_main, tab_history = st.tabs(["Trabalho atual", "Histórico"])
+if nav == "Definições gerais":
+    st.subheader("Definições gerais")
+    st.caption("Estas definições aplicam-se ao direto atual e à geração de mensagens/etiquetas.")
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        st.session_state["currency"] = st.selectbox("Moeda", options=["EUR", "BRL", "USD"], index=["EUR", "BRL", "USD"].index(currency))
+        st.session_state["fill_missing_qty"] = st.checkbox("Se Quantidade estiver vazia, assumir 1", value=fill_missing_qty)
+    with c2:
+        st.markdown("<div class='od-card'><div class='od-muted'><b>Diretório (BD)</b></div><div class='od-small' style='margin-top:6px'>O app aprende e guarda UserId/ProfileId por cliente automaticamente.</div></div>", unsafe_allow_html=True)
 
-with tab_history:
+    st.divider()
+    st.subheader("Mensagens")
+    st.session_state["intro"] = st.text_input("Introdução", value=intro)
+    st.session_state["total_line_template"] = st.text_area("Linha com total (use {total})", value=total_line_template, height=70)
+    st.session_state["outro"] = st.text_input("Fecho", value=outro)
+
+elif nav == "Histórico":
     st.subheader("Histórico")
     htab_sessions, htab_clients = st.tabs(["Sessões (JSON)", "Clientes (DB)"])
 
@@ -477,7 +521,7 @@ with tab_history:
                         except Exception as e:
                             st.error(f"Falha ao apagar: {e}")
 
-with tab_main:
+else:
     # If a session was loaded, we can work without uploading again.
     loaded = st.session_state.get("loaded_session")
     if loaded and loaded.get("orders"):
@@ -522,11 +566,16 @@ with tab_main:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro: {e}")
 
-if orders_df is not None and prices_df is not None:
+if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and prices_df is not None:
     try:
-        tab_comments, tab_upload, tab_prices, tab_summary, tab_messages = st.tabs(
-            ["0) Comentários", "1) Encomendas (Comments)", "2) Preços", "3) Resumo", "4) Mensagens"]
-        )
+        if nav == "Trabalho atual":
+            tab_comments, tab_upload, tab_prices, tab_summary, tab_messages, tab_labels = st.tabs(
+                ["0) Comentários", "1) Encomendas (Comments)", "2) Preços", "3) Resumo", "4) Mensagens", "5) Etiquetas 10×15"]
+            )
+        else:
+            tab_comments, tab_upload, tab_prices, tab_summary, tab_messages, tab_labels = st.tabs(
+                ["1) Encomendas", "2) Preços", "3) Resumo", "4) Mensagens", "5) Etiquetas 10×15", "0) Comentários"]
+            )
 
         with tab_comments:
             st.subheader("Comentários (texto original)")
@@ -541,6 +590,8 @@ if orders_df is not None and prices_df is not None:
                 cols.append("UserId")
             if "ProfileId" in orders_view.columns:
                 cols.append("ProfileId")
+            if "Hora" in orders_view.columns:
+                cols.append("Hora")
             cols += ["Produto", "Quantidade"]
             if "Comentario" in orders_view.columns:
                 cols.append("Comentario")
@@ -588,6 +639,8 @@ if orders_df is not None and prices_df is not None:
                 ui_cols.append("UserId")
             if "ProfileId" in orders_edit.columns:
                 ui_cols.append("ProfileId")
+            if "Hora" in orders_edit.columns:
+                ui_cols.append("Hora")
             ui_cols += ["Produto", "Quantidade"]
 
             orders_edit = orders_edit[ui_cols].copy()
@@ -596,6 +649,7 @@ if orders_df is not None and prices_df is not None:
                     "Cliente": "Cliente",
                     "UserId": "User ID",
                     "ProfileId": "Profile ID",
+                    "Hora": "Hora",
                     "Produto": "Referência",
                     "Quantidade": "Quantidade",
                 }
@@ -611,6 +665,7 @@ if orders_df is not None and prices_df is not None:
             col_cfg = {
                 "Incluir": st.column_config.CheckboxColumn("Incluir", help="Se desativar, esta linha não entra nas contas."),
                 "Cliente": st.column_config.TextColumn("Cliente"),
+                "Hora": st.column_config.TextColumn("Hora", disabled=True),
                 "Referência": st.column_config.TextColumn("Referência", disabled=True),
                 "Quantidade": st.column_config.NumberColumn("Quantidade", min_value=0.0, step=0.5, format="%.3g"),
             }
@@ -1266,6 +1321,122 @@ if orders_df is not None and prices_df is not None:
                 key=f"final_text_{tpl_ver}",
                 disabled=True,
             )
+
+        with tab_labels:
+            st.subheader("Etiquetas 10×15 (imprimir)")
+            st.caption("Uma etiqueta por linha de produto: nome, referência+quantidade, preço unitário e (opcional) hora.")
+
+            base = merged.dropna(subset=["Preco"]).copy()
+            has_hora = "Hora" in base.columns
+            agg_spec = {"Quantidade": ("Quantidade", "sum"), "Preco": ("Preco", "max")}
+            if has_hora:
+                agg_spec["Hora"] = ("Hora", "min")
+
+            labels_df = (
+                base.groupby(["Cliente", "Produto"], as_index=False)
+                .agg(**{k: v for k, v in agg_spec.items()})
+                .rename(columns={"Produto": "Referência"})
+            )
+            labels_df["Imprimir"] = True
+
+            mode = st.radio("Etiquetas", options=["Selecionar (uma/várias)", "Todas"], horizontal=True, key="labels_pick_mode")
+            order = st.selectbox("Ordenar por", options=(["Nome"] + (["Hora"] if has_hora else [])), index=0, key="labels_order")
+            if order == "Nome":
+                labels_df = labels_df.sort_values(["Cliente", "Referência"])
+            elif order == "Hora" and has_hora:
+                # Try to sort by parsed datetime; fallback to raw string
+                dt = pd.to_datetime(labels_df["Hora"], errors="coerce", dayfirst=True)
+                labels_df = labels_df.assign(_HoraSort=dt).sort_values(["_HoraSort", "Cliente", "Referência"]).drop(columns=["_HoraSort"])
+
+            if mode == "Selecionar (uma/várias)":
+                labels_df["Imprimir"] = False
+
+            edited_labels = st.data_editor(
+                labels_df,
+                use_container_width=True,
+                num_rows="fixed",
+                column_config={
+                    "Imprimir": st.column_config.CheckboxColumn("Imprimir"),
+                    "Cliente": st.column_config.TextColumn("Cliente", disabled=True),
+                    "Referência": st.column_config.TextColumn("Referência", disabled=True),
+                    "Quantidade": st.column_config.NumberColumn("Qtd", disabled=True, format="%.3g"),
+                    "Preco": st.column_config.NumberColumn("Preço unit.", disabled=True, format="%.2f"),
+                    **({"Hora": st.column_config.TextColumn("Hora", disabled=True)} if has_hora else {}),
+                },
+                key="labels_editor",
+            )
+
+            def labels_html(blocks: list[dict]) -> str:
+                parts = []
+                for b in blocks:
+                    parts.append(
+                        f"""
+  <div class="label">
+    <div class="client">{b['cliente']}</div>
+    <div class="line">{b['referencia']} — {b['quantidade']}</div>
+    {f"<div class='od-small' style='opacity:.75'>Hora: {b['hora']}</div>" if b.get("hora") else ""}
+    <div class="price">{b['preco_unit']}</div>
+  </div>
+"""
+                    )
+                body = "\n".join(parts) if parts else "<div style='opacity:.75;font-family:Arial'>Sem etiquetas para imprimir.</div>"
+                return f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Etiquetas 10x15</title>
+  <style>
+    @page {{ size: 100mm 150mm; margin: 6mm; }}
+    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }}
+    .label {{
+      width: 100mm;
+      height: 150mm;
+      box-sizing: border-box;
+      page-break-after: always;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 6mm;
+      border: 1px solid rgba(0,0,0,0.12);
+      border-radius: 6mm;
+    }}
+    .client {{ font-size: 20pt; font-weight: 800; line-height: 1.05; }}
+    .line {{ font-size: 16pt; font-weight: 650; margin-top: 8mm; }}
+    .price {{ font-size: 26pt; font-weight: 900; }}
+    @media print {{
+      body {{ margin: 0; }}
+      .label {{ border: none; border-radius: 0; }}
+    }}
+  </style>
+</head>
+<body>
+{body}
+</body>
+</html>"""
+
+            blocks: list[dict] = []
+            chosen_rows = edited_labels[edited_labels["Imprimir"].fillna(False)].copy()
+            for _, row in chosen_rows.iterrows():
+                blocks.append(
+                    {
+                        "cliente": str(row["Cliente"]),
+                        "referencia": str(row["Referência"]),
+                        "quantidade": f"{float(row['Quantidade']):g}",
+                        "preco_unit": f"Preço: {format_currency(float(row['Preco']), currency)}",
+                        "hora": (str(row["Hora"]) if has_hora and pd.notna(row.get("Hora")) and str(row.get("Hora")).strip() else ""),
+                    }
+                )
+
+            html = labels_html(blocks)
+            st.download_button(
+                "Download etiquetas (HTML)",
+                data=html.encode("utf-8"),
+                file_name="etiquetas_10x15.html",
+                mime="text/html",
+            )
+            with st.expander("Pré-visualização", expanded=False):
+                st.components.v1.html(html, height=650, scrolling=True)
+            st.info("Para imprimir: abre o HTML, escolhe papel 10×15 cm, margens mínimas e escala 100%.")
 
         # Auto-save locally (outputs) so closing browser doesn't lose work.
         # Não guardamos preços aqui para evitar reutilização entre diretos.
