@@ -2,7 +2,11 @@ import os
 from typing import Optional
 
 import streamlit as st
-import tomllib
+try:
+    import tomllib  # py311+
+except Exception:  # pragma: no cover
+    tomllib = None
+    import tomli
 
 try:
     import gspread
@@ -20,7 +24,9 @@ def _load_toml_if_exists(path: str) -> dict:
         if not os.path.exists(path):
             return {}
         with open(path, "rb") as f:
-            return tomllib.load(f) or {}
+            if tomllib is not None:
+                return tomllib.load(f) or {}
+            return tomli.load(f) or {}
     except Exception:
         return {}
 

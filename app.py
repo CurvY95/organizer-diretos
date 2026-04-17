@@ -89,7 +89,13 @@ def require_login() -> None:
       - Streamlit secrets: AUTH_USER / AUTH_PASS
       - or env vars: ORGANIZER_USER / ORGANIZER_PASS
     """
-    secrets = getattr(st, "secrets", {}) or {}
+    # `st.secrets` throws if no secrets.toml exists; treat as empty for local runs.
+    try:
+        secrets = getattr(st, "secrets", {}) or {}
+        # force evaluation (Streamlit secrets is lazy)
+        _ = len(secrets) if hasattr(secrets, "__len__") else 0
+    except Exception:
+        secrets = {}
     expected_user = (secrets.get("AUTH_USER") if hasattr(secrets, "get") else None) or os.getenv("ORGANIZER_USER")
     expected_pass = (secrets.get("AUTH_PASS") if hasattr(secrets, "get") else None) or os.getenv("ORGANIZER_PASS")
 
@@ -584,8 +590,8 @@ if orders_df is not None and prices_df is not None:
         parsed_orders_fp = stable_orders_fingerprint(parsed.orders)
         local = load_local_state(STATE_PATH)
         saved_by_fp = (local.get("by_orders_fp") or {}).get(parsed_orders_fp) or {}
-        if saved_by_fp.get("price_overrides") and not st.session_state["price_overrides"]:
-            st.session_state["price_overrides"] = saved_by_fp["price_overrides"]
+        # Nota: preços podem mudar de direto para direto. Não reutilizamos automaticamente preços
+        # guardados localmente; apenas dentro de sessões carregadas/guardadas.
 
         # Full price table for all references present in orders
         price_table = (
@@ -1161,11 +1167,11 @@ if orders_df is not None and prices_df is not None:
                 disabled=True,
             )
 
-        # Auto-save locally (prices + outputs) so closing browser doesn't lose work
+        # Auto-save locally (outputs) so closing browser doesn't lose work.
+        # Não guardamos preços aqui para evitar reutilização entre diretos.
         local = load_local_state(STATE_PATH)
         local.setdefault("by_orders_fp", {})
         local["by_orders_fp"][parsed_orders_fp] = {
-            "price_overrides": st.session_state["price_overrides"],
             "final_text": final_text if "final_text" in locals() else "",
             "totals_csv": (summary.to_csv(index=False) if "summary" in locals() else ""),
             "last_updated": pd.Timestamp.utcnow().isoformat(),

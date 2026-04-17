@@ -3,3 +3,4 @@ openpyxl
 streamlit
 gspread
 google-auth
+tomli
