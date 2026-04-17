@@ -70,6 +70,19 @@ def _validate_schema_name(schema: str) -> str:
     return schema
 
 
+def _table_names(engine: Engine) -> dict[str, Any]:
+    url = str(engine.url)
+    is_sqlite = url.startswith("sqlite")
+    schema = _validate_schema_name(_get_schema_name())
+    return {
+        "is_sqlite": is_sqlite,
+        "schema": schema,
+        "customers": _tn("customers", schema=schema, is_sqlite=is_sqlite),
+        "sessions": _tn("sessions", schema=schema, is_sqlite=is_sqlite),
+        "items": _tn("items", schema=schema, is_sqlite=is_sqlite),
+    }
+
+
 def connect(db_path: Optional[str] = None) -> Engine:
     # If db_path is provided, force SQLite at that location (dev/testing).
     if db_path:
@@ -81,12 +94,12 @@ def connect(db_path: Optional[str] = None) -> Engine:
 
 
 def init_db(engine: Engine) -> None:
-    url = str(engine.url)
-    is_sqlite = url.startswith("sqlite")
-    schema = _validate_schema_name(_get_schema_name())
-    customers = _tn("customers", schema=schema, is_sqlite=is_sqlite)
-    sessions = _tn("sessions", schema=schema, is_sqlite=is_sqlite)
-    items = _tn("items", schema=schema, is_sqlite=is_sqlite)
+    tn = _table_names(engine)
+    is_sqlite = bool(tn["is_sqlite"])
+    schema = str(tn["schema"])
+    customers = str(tn["customers"])
+    sessions = str(tn["sessions"])
+    items = str(tn["items"])
 
     with engine.begin() as con:
         if is_sqlite:
@@ -167,7 +180,7 @@ def init_db(engine: Engine) -> None:
         con.execute(text(f"CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON {sessions}(created_at);"))
 
 
-def _ensure_customer_row(con, *, cliente: str) -> None:
+def _ensure_customer_row(con, *, cliente: str, customers_table: str) -> None:
     cliente = str(cliente or "").strip()
     if not cliente:
         return
@@ -175,22 +188,20 @@ def _ensure_customer_row(con, *, cliente: str) -> None:
     con.execute(
         text(
             """
-            INSERT INTO customers(cliente, notes, tags, created_at, updated_at)
+            INSERT INTO {customers}(cliente, notes, tags, created_at, updated_at)
             VALUES(:cliente, '', '', :now, :now)
             ON CONFLICT(cliente) DO NOTHING;
             """
-        ),
+        ).bindparams(customers=text(customers_table)),
         {"cliente": cliente, "now": now},
     )
 
 
 def get_customer_meta(engine: Engine, *, cliente: str) -> dict[str, str]:
-    url = str(engine.url)
-    is_sqlite = url.startswith("sqlite")
-    schema = _validate_schema_name(_get_schema_name())
-    customers = _tn("customers", schema=schema, is_sqlite=is_sqlite)
+    tn = _table_names(engine)
+    customers = str(tn["customers"])
     with engine.begin() as con:
-        _ensure_customer_row(con, cliente=cliente)
+        _ensure_customer_row(con, cliente=cliente, customers_table=customers)
         r = con.execute(
             text(f"SELECT cliente, notes, tags, created_at, updated_at FROM {customers} WHERE cliente = :cliente;"),
             {"cliente": str(cliente or "").strip()},
@@ -204,12 +215,10 @@ def upsert_customer_meta(engine: Engine, *, cliente: str, notes: str, tags: str)
     cliente = str(cliente or "").strip()
     if not cliente:
         raise ValueError("Cliente vazio.")
-    url = str(engine.url)
-    is_sqlite = url.startswith("sqlite")
-    schema = _validate_schema_name(_get_schema_name())
-    customers = _tn("customers", schema=schema, is_sqlite=is_sqlite)
+    tn = _table_names(engine)
+    customers = str(tn["customers"])
     with engine.begin() as con:
-        _ensure_customer_row(con, cliente=cliente)
+        _ensure_customer_row(con, cliente=cliente, customers_table=customers)
         now = _utc_now_iso()
         con.execute(
             text(
@@ -223,36 +232,43 @@ def upsert_customer_meta(engine: Engine, *, cliente: str, notes: str, tags: str)
         )
 
 
-def upsert_session(con, *, session_id: str, created_at: str, label: str, source: str) -> None:
+def upsert_session(con, *, session_id: str, created_at: str, label: str, source: str, sessions_table: str) -> None:
     con.execute(
         text(
             """
-            INSERT INTO sessions(id, created_at, label, source)
+            INSERT INTO {sessions}(id, created_at, label, source)
             VALUES(:id, :created_at, :label, :source)
             ON CONFLICT(id) DO UPDATE SET
               created_at=excluded.created_at,
               label=excluded.label,
               source=excluded.source;
             """
-        ),
+        ).bindparams(sessions=text(sessions_table)),
         {"id": session_id, "created_at": created_at, "label": label or "", "source": source or ""},
     )
 
 
-def replace_session_items(con, *, session_id: str, rows: list[dict[str, Any]]) -> None:
+def replace_session_items(
+    con,
+    *,
+    session_id: str,
+    rows: list[dict[str, Any]],
+    items_table: str,
+    customers_table: str,
+) -> None:
     # Full replace: delete existing then insert.
-    con.execute(text("DELETE FROM items WHERE session_id = :sid;"), {"sid": session_id})
+    con.execute(text("DELETE FROM {items} WHERE session_id = :sid;").bindparams(items=text(items_table)), {"sid": session_id})
     created_at = _utc_now_iso()
     for r in rows:
-        _ensure_customer_row(con, cliente=str(r.get("Cliente") or ""))
+        _ensure_customer_row(con, cliente=str(r.get("Cliente") or ""), customers_table=customers_table)
         con.execute(
             text(
                 """
-                INSERT INTO items(
+                INSERT INTO {items}(
                   session_id, cliente, produto, quantidade, preco, total_item, comentario, created_at
                 ) VALUES (:sid, :cliente, :produto, :quantidade, :preco, :total_item, :comentario, :created_at);
                 """
-            ),
+            ).bindparams(items=text(items_table)),
             {
                 "sid": session_id,
                 "cliente": str(r.get("Cliente") or ""),
@@ -276,9 +292,22 @@ def save_snapshot(
     merged_rows: list[dict[str, Any]],
 ) -> None:
     with engine.begin() as con:
-        # The caller uses the engine; we compute schema-qualified names in each query function.
-        upsert_session(con, session_id=session_id, created_at=created_at, label=label, source=source)
-        replace_session_items(con, session_id=session_id, rows=merged_rows)
+        tn = _table_names(engine)
+        upsert_session(
+            con,
+            session_id=session_id,
+            created_at=created_at,
+            label=label,
+            source=source,
+            sessions_table=str(tn["sessions"]),
+        )
+        replace_session_items(
+            con,
+            session_id=session_id,
+            rows=merged_rows,
+            items_table=str(tn["items"]),
+            customers_table=str(tn["customers"]),
+        )
 
 
 def list_sessions(engine: Engine, limit: int = 50) -> list[dict[str, Any]]:
