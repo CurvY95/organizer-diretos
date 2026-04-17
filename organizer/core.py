@@ -47,6 +47,14 @@ PRICES_ALIASES = {
 }
 
 
+def normalize_produto_key(v: str) -> str:
+    s = "" if v is None else str(v)
+    s = s.replace("\u00a0", " ")  # non-breaking space
+    s = s.strip()
+    s = re.sub(r"\s+", " ", s)
+    return s.lower()
+
+
 def _normalize_col_name(c) -> str:
     # Column names can arrive as float/NaN when reading some CSV/XLSX exports.
     if c is None:
@@ -208,8 +216,8 @@ def parse_inputs(
             f"Exemplos (até 20):\n{bad.to_string(index=False)}"
         )
 
-    orders["ProdutoKey"] = orders["Produto"].astype(str).str.strip().str.lower()
-    prices["ProdutoKey"] = prices["Produto"].astype(str).str.strip().str.lower()
+    orders["ProdutoKey"] = orders["Produto"].map(normalize_produto_key)
+    prices["ProdutoKey"] = prices["Produto"].map(normalize_produto_key)
 
     prices = prices.drop_duplicates(subset=["ProdutoKey"], keep="last")
 
@@ -231,7 +239,7 @@ def apply_price_overrides(merged: pd.DataFrame, overrides: pd.DataFrame) -> pd.D
     if overrides is None or overrides.empty:
         return merged
     ov = overrides.copy()
-    ov["ProdutoKey"] = ov["ProdutoKey"].astype(str).str.strip().str.lower()
+    ov["ProdutoKey"] = ov["ProdutoKey"].map(normalize_produto_key)
     ov["Preco"] = coerce_number_series(ov["Preco"])
     ov = ov.dropna(subset=["ProdutoKey", "Preco"]).drop_duplicates(subset=["ProdutoKey"], keep="last")
 
@@ -307,7 +315,7 @@ def stable_orders_fingerprint(orders: pd.DataFrame) -> str:
     cols = ["Cliente", "Produto", "Quantidade"]
     df = orders[cols].copy()
     df["Cliente"] = df["Cliente"].astype(str).str.strip()
-    df["Produto"] = df["Produto"].astype(str).str.strip().str.lower()
+    df["Produto"] = df["Produto"].map(normalize_produto_key)
     df["Quantidade"] = pd.to_numeric(df["Quantidade"], errors="coerce").fillna(0)
     df = df.sort_values(cols).reset_index(drop=True)
     payload = df.to_csv(index=False).encode("utf-8")

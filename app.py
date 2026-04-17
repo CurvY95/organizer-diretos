@@ -883,7 +883,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
             if do_save:
                 new_overrides: dict[str, float] = {}
                 for _, r in edited.iterrows():
-                    k = str(r.get("ProdutoKey") or "").strip().lower()
+                    k = oc.normalize_produto_key(r.get("ProdutoKey") or "")
                     if not k:
                         continue
                     v = r.get("Preco")
@@ -965,6 +965,20 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                 f"Ainda faltam preços para {len(still_missing)} referência(s). "
                 "Preencha na aba '2) Preços' para liberar o resumo."
             )
+            with st.expander("Diagnóstico preços", expanded=False):
+                try:
+                    order_keys = set(merged["ProdutoKey"].dropna().astype(str).tolist())
+                    override_keys = set((st.session_state.get("price_overrides") or {}).keys())
+                    st.write(
+                        {
+                            "refs_no_pedido": len(order_keys),
+                            "refs_com_preco_guardado": len(override_keys),
+                            "refs_que_casaram": len(order_keys.intersection(override_keys)),
+                            "exemplos_em_falta": still_missing.head(10).to_dict(orient="records"),
+                        }
+                    )
+                except Exception as e:
+                    st.write(f"Falha no diagnóstico: {e}")
 
         by_client, details = build_summary(merged.dropna(subset=["Preco"]))
         client_ids_map: dict[str, dict[str, str]] = {}
