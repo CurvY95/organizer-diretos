@@ -4,5 +4,3 @@ streamlit
 gspread
 google-auth
 tomli
-sqlalchemy
-psycopg2-binary

@@ -1,5 +1,4 @@
 import io
-import json
 import os
 import re
 from typing import Optional
@@ -7,7 +6,6 @@ from typing import Optional
 import pandas as pd
 import streamlit as st
 
-from organizer import db as odb
 from organizer import core as oc
 from organizer import facebook as ofb
 from organizer import storage_local as osl
@@ -135,70 +133,6 @@ st.set_page_config(page_title="Organizer Diretos", layout="wide", page_icon="�
 
 require_login()
 
-
-@st.cache_resource
-def _get_db(_cache_bust: str):
-    con = odb.connect()
-    odb.init_db(con)
-    return con
-
-
-def _db_cache_bust_key() -> str:
-    # Make DB connection cache sensitive to secrets/env changes.
-    try:
-        secrets = getattr(st, "secrets", {}) or {}
-        _ = len(secrets) if hasattr(secrets, "__len__") else 0
-    except Exception:
-        secrets = {}
-
-    db_url = ""
-    schema = ""
-    if hasattr(secrets, "get"):
-        db_url = str(secrets.get("DATABASE_URL") or "").strip()
-        schema = str(secrets.get("DB_SCHEMA") or "").strip()
-    db_url = db_url or str(os.getenv("DATABASE_URL") or "").strip()
-    schema = schema or str(os.getenv("DB_SCHEMA") or "").strip()
-    return f"{schema}|{db_url}"
-
-
-try:
-    db_con = _get_db(_db_cache_bust_key())
-except Exception as e:
-    st.error("Falha a ligar à base de dados (Supabase/Postgres).")
-    st.caption(
-        "No Streamlit Cloud isto costuma ser: URL/pooler errado, password errada, ou password com caracteres "
-        "especiais sem URL-encode. Usa o Transaction pooler (porta 6543) e `sslmode=require`."
-    )
-    st.caption(f"Detalhe: `{type(e).__name__}`")
-    if type(e).__name__ == "ArgumentError":
-        # Try to show a safe, non-secret diagnostic for URL formatting issues.
-        try:
-            from sqlalchemy.engine import make_url
-
-            try:
-                secrets = getattr(st, "secrets", {}) or {}
-                _ = len(secrets) if hasattr(secrets, "__len__") else 0
-            except Exception:
-                secrets = {}
-
-            db_url = ""
-            if hasattr(secrets, "get"):
-                db_url = str(secrets.get("DATABASE_URL") or "").strip()
-            db_url = db_url or str(os.getenv("DATABASE_URL") or "").strip()
-            parsed = make_url(db_url)
-            q = dict(parsed.query or {})
-            st.caption(
-                "Diagnóstico (sem password): "
-                f"driver=`{parsed.drivername}`, user=`{parsed.username}`, host=`{parsed.host}`, "
-                f"port=`{parsed.port}`, db=`{parsed.database}`, sslmode=`{q.get('sslmode','')}`"
-            )
-        except Exception:
-            st.caption(
-                "Diagnóstico: o `DATABASE_URL` não está num formato válido para SQLAlchemy. "
-                "Confirma que não tem espaços/linhas novas e que a password está URL-encoded se tiver caracteres especiais."
-            )
-    st.stop()
-
 st.markdown(
     """
 <style>
@@ -304,7 +238,7 @@ with st.sidebar:
 
     nav = st.radio(
         "Navegação",
-        options=["Trabalho atual", "Etiquetas 10×15", "Clientes", "Histórico", "Definições gerais"],
+        options=["Trabalho atual", "Etiquetas 10×15", "Histórico", "Definições gerais"],
         index=0,
         label_visibility="collapsed",
         key="nav_page",
@@ -326,8 +260,6 @@ st.session_state.setdefault("fill_missing_qty", True)
 st.session_state.setdefault("intro", "Oi! Segue o resumo da tua encomenda:")
 st.session_state.setdefault("total_line_template", "Total a pagar: {total}")
 st.session_state.setdefault("outro", "Obrigado!")
-st.session_state.setdefault("auto_sync_ids_db", True)
-st.session_state.setdefault("auto_save_history_db", True)
 
 currency = st.session_state.get("currency", "EUR")
 fill_missing_qty = bool(st.session_state.get("fill_missing_qty", True))
@@ -347,9 +279,7 @@ if nav == "Definições gerais":
         st.session_state["currency"] = st.selectbox("Moeda", options=["EUR", "BRL", "USD"], index=["EUR", "BRL", "USD"].index(currency))
         st.session_state["fill_missing_qty"] = st.checkbox("Se Quantidade estiver vazia, assumir 1", value=fill_missing_qty)
     with c2:
-        st.markdown("<div class='od-card'><div class='od-muted'><b>Diretório (BD)</b></div><div class='od-small' style='margin-top:6px'>O app aprende e guarda UserId/ProfileId por cliente automaticamente.</div></div>", unsafe_allow_html=True)
-        st.session_state["auto_sync_ids_db"] = st.checkbox("Auto-sync IDs na BD (mais lento)", value=bool(st.session_state.get("auto_sync_ids_db", True)))
-        st.session_state["auto_save_history_db"] = st.checkbox("Auto-gravar histórico na BD (mais lento)", value=bool(st.session_state.get("auto_save_history_db", True)))
+        st.markdown("<div class='od-card'><div class='od-muted'><b>Dica</b></div><div class='od-small' style='margin-top:6px'>Guarda a sessão quando terminares para reutilizar preços e dados.</div></div>", unsafe_allow_html=True)
 
     st.divider()
     st.subheader("Mensagens")
@@ -357,233 +287,50 @@ if nav == "Definições gerais":
     st.session_state["total_line_template"] = st.text_area("Linha com total (use {total})", value=total_line_template, height=70)
     st.session_state["outro"] = st.text_input("Fecho", value=outro)
 
-elif nav == "Clientes":
-    st.subheader("Clientes")
-    st.caption("Editar/criar clientes e guardar UserId/ProfileId na BD.")
-
-    c1, c2 = st.columns([2, 1])
-    with c1:
-        search = st.text_input("Pesquisar cliente", value="", placeholder="Escreve parte do nome…", key="clientes_search")
-    with c2:
-        with st.popover("Adicionar cliente"):
-            new_name = st.text_input("Nome do cliente", value="", placeholder="Ex.: Maria Silva", key="new_customer_name")
-            if st.button("Criar", type="primary", disabled=not new_name.strip(), key="create_customer_btn"):
-                try:
-                    odb.ensure_customer(db_con, cliente=new_name.strip())
-                    st.success("Cliente criado.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Falha ao criar cliente: {e}")
-
-    try:
-        all_customers = odb.list_all_customers(db_con)
-    except Exception as e:
-        all_customers = []
-        st.error(f"DB: falha ao listar clientes: {e}")
-
-    if not all_customers:
-        st.info("Ainda não há clientes na BD. Cria um cliente ou importa um direto.")
-    else:
-        filtered = all_customers
-        if search.strip():
-            s = search.strip().lower()
-            filtered = [c for c in all_customers if s in c.lower()]
-        chosen = st.selectbox("Cliente", options=filtered or all_customers, key="clientes_pick")
-
-        try:
-            meta = odb.get_customer_meta(db_con, cliente=chosen)
-        except Exception as e:
-            meta = {"user_id": "", "profile_id": "", "notes": "", "tags": ""}
-            st.error(f"DB: falha ao carregar cliente: {e}")
-
-        st.markdown("<div class='od-card'><div class='od-muted'><b>Perfil</b></div></div>", unsafe_allow_html=True)
-        p1, p2 = st.columns([1, 1])
-        with p1:
-            user_id = st.text_input("UserId", value=str(meta.get("user_id") or ""), key="cust_user_id_edit")
-            profile_id = st.text_input("ProfileId (username)", value=str(meta.get("profile_id") or ""), key="cust_profile_id_edit")
-        with p2:
-            tags = st.text_input("Tags (vírgulas)", value=str(meta.get("tags") or ""), key="cust_tags_edit")
-            notes = st.text_area("Notas internas", value=str(meta.get("notes") or ""), height=140, key="cust_notes_edit")
-
-        csave1, csave2 = st.columns([1, 2])
-        with csave1:
-            if st.button("Guardar cliente", type="primary", key="save_customer_profile_btn"):
-                try:
-                    odb.upsert_customer_ids(db_con, cliente=chosen, user_id=user_id, profile_id=profile_id)
-                    odb.upsert_customer_meta(db_con, cliente=chosen, notes=notes, tags=tags)
-                    st.success("Guardado.")
-                except Exception as e:
-                    st.error(f"Falha ao guardar: {e}")
-        with csave2:
-            st.caption("Dica: podes preencher UserId/ProfileId aqui mesmo que o ficheiro não traga IDs.")
-
 elif nav == "Histórico":
     st.subheader("Histórico")
-    htab_sessions, htab_clients = st.tabs(["Sessões (JSON)", "Clientes (DB)"])
+    st.subheader("Histórico de sessões")
+    sessions = list_sessions()
+    if not sessions:
+        st.info("Ainda não há sessões guardadas.")
+    else:
+        sessions_df = pd.DataFrame(sessions)[["created_at", "label", "orders_rows", "refs", "path"]]
+        sessions_df = sessions_df.rename(
+            columns={
+                "created_at": "Data (UTC)",
+                "label": "Nome",
+                "orders_rows": "Linhas",
+                "refs": "Referências",
+                "path": "Arquivo",
+            }
+        )
+        st.dataframe(sessions_df.drop(columns=["Arquivo"]), width="stretch")
 
-    with htab_clients:
-        st.caption("Histórico persistente (base de dados). Aqui consegues ver o que cada pessoa comprou em diretos anteriores.")
-        try:
-            customers = odb.list_customers(db_con)
-        except Exception as e:
-            customers = []
-            st.error(f"DB: falha ao listar clientes: {e}")
-
-        if not customers:
-            st.info("Ainda não há histórico na base de dados. Gere um direto e o app grava automaticamente.")
-        else:
-            search = st.text_input("Pesquisar cliente", value="", placeholder="Escreve parte do nome…", key="hist_cliente_search")
-            filtered = customers
-            if search.strip():
-                s = search.strip().lower()
-                filtered = [c for c in customers if s in c.lower()]
-            cliente_h = st.selectbox("Cliente", options=filtered or customers, key="hist_cliente_pick")
-
-            # Customer meta (notes/tags)
-            try:
-                meta = odb.get_customer_meta(db_con, cliente=cliente_h)
-            except Exception as e:
-                meta = {"notes": "", "tags": ""}
-                st.warning(f"DB: não consegui carregar notas/tags: {e}")
-
-            st.markdown("<div class='od-muted'><b>Perfil do cliente</b></div>", unsafe_allow_html=True)
-            m1, m2 = st.columns([2, 1])
-            with m1:
-                notes = st.text_area("Notas internas", value=str(meta.get("notes") or ""), height=140, key="cust_notes")
-                tags = st.text_input("Tags (separadas por vírgula)", value=str(meta.get("tags") or ""), key="cust_tags")
-                if st.button("Guardar perfil", type="primary", key="save_cust_profile"):
+        chosen = st.selectbox(
+            "Abrir sessão",
+            options=sessions,
+            format_func=lambda s: f"{s['created_at']} — {s['label'] or s['id']}",
+        )
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            if st.button("Abrir", type="primary"):
+                data = load_session(chosen["path"])
+                st.session_state["loaded_session"] = data
+                st.success("Sessão carregada. Vá à aba 'Trabalho atual'.")
+        with c2:
+            with st.popover("Apagar sessão"):
+                st.warning("Isto apaga a sessão localmente (não dá para recuperar).")
+                confirm = st.checkbox("Confirmo que quero apagar", value=False, key="confirm_delete_session")
+                if st.button("Apagar definitivamente", type="secondary", disabled=not confirm):
                     try:
-                        odb.upsert_customer_meta(db_con, cliente=cliente_h, notes=notes, tags=tags)
-                        st.success("Perfil guardado.")
+                        delete_session(chosen["path"])
+                        loaded = st.session_state.get("loaded_session") or {}
+                        if loaded.get("id") == chosen.get("id"):
+                            st.session_state.pop("loaded_session", None)
+                        st.success("Sessão apagada.")
+                        st.rerun()
                     except Exception as e:
-                        st.error(f"Falha ao guardar perfil: {e}")
-            with m2:
-                try:
-                    stats = odb.customer_stats(db_con, cliente=cliente_h)
-                except Exception as e:
-                    stats = {"sessions_count": 0, "items_count": 0, "total_spent": 0.0, "last_session_at": ""}
-                    st.warning(f"DB: falha ao calcular stats: {e}")
-                st.metric("Diretos", int(stats.get("sessions_count") or 0))
-                st.metric("Itens", int(stats.get("items_count") or 0))
-                # Total spent is only meaningful when items had prices at the time of snapshot.
-                st.metric("Total (com preço)", format_currency(float(stats.get("total_spent") or 0.0), currency))
-                if stats.get("last_session_at"):
-                    st.caption(f"Último direto: `{stats.get('last_session_at')}`")
-
-            st.divider()
-            ct1, ct2 = st.columns(2)
-            with ct1:
-                st.markdown("<div class='od-muted'><b>Top produtos</b></div>", unsafe_allow_html=True)
-                try:
-                    top = odb.customer_top_products(db_con, cliente=cliente_h, limit=50)
-                    st.dataframe(pd.DataFrame(top), width="stretch")
-                except Exception as e:
-                    st.error(f"DB: falha ao listar top produtos: {e}")
-            with ct2:
-                st.markdown("<div class='od-muted'><b>Diretos anteriores</b></div>", unsafe_allow_html=True)
-                try:
-                    sess = odb.customer_sessions(db_con, cliente=cliente_h, limit=50)
-                    st.dataframe(pd.DataFrame(sess), width="stretch")
-                except Exception as e:
-                    st.error(f"DB: falha ao listar sessões: {e}")
-
-            st.divider()
-            st.markdown("<div class='od-muted'><b>Linhas (histórico completo)</b></div>", unsafe_allow_html=True)
-            try:
-                hist_rows = odb.customer_history(db_con, cliente=cliente_h)
-                st.dataframe(pd.DataFrame(hist_rows), width="stretch")
-            except Exception as e:
-                st.error(f"DB: falha ao buscar histórico: {e}")
-
-    with htab_sessions:
-        st.subheader("Histórico de sessões")
-        sessions = list_sessions()
-        if not sessions:
-            st.info("Ainda não há sessões guardadas.")
-        else:
-            sessions_df = pd.DataFrame(sessions)[["created_at", "label", "orders_rows", "refs", "path"]]
-            sessions_df = sessions_df.rename(
-                columns={
-                    "created_at": "Data (UTC)",
-                    "label": "Nome",
-                    "orders_rows": "Linhas",
-                    "refs": "Referências",
-                    "path": "Arquivo",
-                }
-            )
-            st.dataframe(sessions_df.drop(columns=["Arquivo"]), width="stretch")
-
-            st.divider()
-            st.subheader("Migrar sessões (JSON) → Base de dados")
-            st.caption("Importa as sessões antigas para a BD. Se uma sessão já existir na BD, é ignorada.")
-            if st.button("Migrar tudo para a BD", type="primary", key="migrate_json_to_db"):
-                migrated = 0
-                skipped = 0
-                failed = 0
-                for s in sessions:
-                    try:
-                        sid = str(s.get("id") or "").strip()
-                        if not sid:
-                            skipped += 1
-                            continue
-                        if odb.session_exists(db_con, session_id=sid):
-                            skipped += 1
-                            continue
-                        data = load_session(s["path"])
-                        created_at = str(data.get("created_at") or s.get("created_at") or "")
-                        label = str(data.get("label") or s.get("label") or "")
-                        source = str((data.get("meta") or {}).get("source") or "")
-                        rows = []
-                        for r in (data.get("orders") or []):
-                            rows.append(
-                                {
-                                    "Cliente": str(r.get("Cliente") or ""),
-                                    "Produto": str(r.get("Produto") or ""),
-                                    "Quantidade": float(r.get("Quantidade") or 0.0),
-                                    "Comentario": (str(r.get("Comentario")) if r.get("Comentario") is not None else None),
-                                    # prices not available in JSON sessions
-                                    "Preco": None,
-                                    "TotalItem": None,
-                                }
-                            )
-                        odb.save_snapshot(
-                            db_con,
-                            session_id=sid,
-                            created_at=created_at or now_iso(),
-                            label=label or "Sessão",
-                            source=source,
-                            merged_rows=rows,
-                        )
-                        migrated += 1
-                    except Exception:
-                        failed += 1
-                st.success(f"Migração concluída. Migradas: {migrated} | Ignoradas: {skipped} | Falhas: {failed}")
-
-            chosen = st.selectbox(
-                "Abrir sessão",
-                options=sessions,
-                format_func=lambda s: f"{s['created_at']} — {s['label'] or s['id']}",
-            )
-            c1, c2 = st.columns([1, 1])
-            with c1:
-                if st.button("Abrir", type="primary"):
-                    data = load_session(chosen["path"])
-                    st.session_state["loaded_session"] = data
-                    st.success("Sessão carregada. Vá à aba 'Trabalho atual'.")
-            with c2:
-                with st.popover("Apagar sessão"):
-                    st.warning("Isto apaga a sessão localmente (não dá para recuperar).")
-                    confirm = st.checkbox("Confirmo que quero apagar", value=False, key="confirm_delete_session")
-                    if st.button("Apagar definitivamente", type="secondary", disabled=not confirm):
-                        try:
-                            delete_session(chosen["path"])
-                            loaded = st.session_state.get("loaded_session") or {}
-                            if loaded.get("id") == chosen.get("id"):
-                                st.session_state.pop("loaded_session", None)
-                            st.success("Sessão apagada.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Falha ao apagar: {e}")
+                        st.error(f"Falha ao apagar: {e}")
 
 else:
     # If a session was loaded, we can work without uploading again.
@@ -923,52 +670,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
             loaded = st.session_state.get("loaded_session") or {}
             st.session_state["history_session_id"] = loaded.get("id") or safe_session_id(now_iso())
 
-        # Persist snapshot in DB (only rows with price, so history reflects what was actually billed).
-        try:
-            rows_for_db = merged.dropna(subset=["Preco"]).copy()
-            # Attach optional comment if present in the original orders
-            orders_std = _standardize_df_columns(orders_for_calc)
-            orders_std = _apply_aliases(orders_std, ORDERS_ALIASES)
-            if "Comentario" in orders_std.columns:
-                comm_map = (
-                    orders_std[["Cliente", "Comentario"]]
-                    .dropna(subset=["Cliente"])
-                    .assign(Cliente=lambda d: d["Cliente"].astype(str).str.strip())
-                )
-                # For repeated rows, keep last non-empty comment.
-                comm_map["Comentario"] = comm_map["Comentario"].astype(str).map(lambda s: s.strip())
-                comm_map = comm_map[comm_map["Comentario"] != ""]
-                comm_dict = {r["Cliente"]: r["Comentario"] for _, r in comm_map.iterrows()}
-                rows_for_db["Comentario"] = rows_for_db["Cliente"].astype(str).map(lambda c: comm_dict.get(str(c).strip(), ""))
-
-            # Build minimal payload
-            payload = rows_for_db[["Cliente", "Produto", "Quantidade", "Preco", "TotalItem"]].copy()
-            if "Comentario" in rows_for_db.columns:
-                payload["Comentario"] = rows_for_db["Comentario"]
-            merged_rows = payload.to_dict(orient="records")
-
-            session_id = str(st.session_state["history_session_id"])
-            created_at = (st.session_state.get("history_created_at") or now_iso())
-            st.session_state["history_created_at"] = created_at
-            label = (st.session_state.get("session_label") or "").strip() or "Direto"
-            source = orders_source_label or ""
-            snapshot_key = (
-                f"{session_id}|{parsed_orders_fp}|{len(st.session_state.get('price_overrides') or {})}|"
-                f"{int(rows_for_db.shape[0])}"
-            )
-            if bool(st.session_state.get("auto_save_history_db", True)):
-                if st.session_state.get("last_db_snapshot_key") != snapshot_key:
-                    odb.save_snapshot(
-                        db_con,
-                        session_id=session_id,
-                        created_at=created_at,
-                        label=label,
-                        source=source,
-                        merged_rows=merged_rows,
-                    )
-                    st.session_state["last_db_snapshot_key"] = snapshot_key
-        except Exception as e:
-            st.warning(f"DB: não consegui gravar histórico automaticamente: {e}")
+        # Nota: sem BD. O histórico continua a ser gerido por sessões guardadas (JSON).
 
         still_missing = merged[merged["Preco"].isna()][["ProdutoKey", "Produto"]].drop_duplicates()
         if not still_missing.empty:
@@ -1028,40 +730,50 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                 "profile_id": profile_id,
             }
 
-        # Merge with directory in DB: fill missing IDs from DB, then auto-update DB when file brings new IDs.
+        # Diretório local (persistente neste PC): preenche IDs em falta e aprende novos IDs.
         try:
-            to_upsert: list[tuple[str, str, str]] = []
-            bulk_db_ids = odb.get_customer_ids_bulk(db_con, clientes=list(client_ids_map.keys()))
+            local_dir = local.get("client_ids") or {}
+            if not isinstance(local_dir, dict):
+                local_dir = {}
+
+            dir_changed = False
             for nome, ids in client_ids_map.items():
-                file_user = (ids.get("user_id") or "").strip()
-                file_profile = (ids.get("profile_id") or "").strip()
+                key = str(nome).strip()
+                saved = local_dir.get(key) or {}
+                if not isinstance(saved, dict):
+                    saved = {}
 
-                # Fill missing from DB
-                if not file_user or not file_profile:
-                    db_ids = bulk_db_ids.get(nome) or {"user_id": "", "profile_id": ""}
-                    if not file_user and db_ids.get("user_id"):
-                        ids["user_id"] = db_ids["user_id"]
-                        file_user = ids["user_id"]
-                    if not file_profile and db_ids.get("profile_id"):
-                        ids["profile_id"] = db_ids["profile_id"]
-                        file_profile = ids["profile_id"]
+                # Fill missing from local directory
+                if not (ids.get("user_id") or "").strip() and (saved.get("user_id") or "").strip():
+                    ids["user_id"] = str(saved.get("user_id") or "").strip()
+                if not (ids.get("profile_id") or "").strip() and (saved.get("profile_id") or "").strip():
+                    ids["profile_id"] = str(saved.get("profile_id") or "").strip()
 
-                # If file has IDs, upsert to DB (only when changed)
-                if file_user or file_profile:
-                    db_ids = bulk_db_ids.get(nome) or {"user_id": "", "profile_id": ""}
-                    if (file_user and file_user != (db_ids.get("user_id") or "")) or (
-                        file_profile and file_profile != (db_ids.get("profile_id") or "")
-                    ):
-                        to_upsert.append((nome, file_user, file_profile))
+                # Learn/update local directory when we have something non-empty
+                new_user = str(ids.get("user_id") or "").strip()
+                new_profile = str(ids.get("profile_id") or "").strip()
+                prev_user = str(saved.get("user_id") or "").strip()
+                prev_profile = str(saved.get("profile_id") or "").strip()
 
-            if to_upsert:
-                sync_sig = "|".join([f"{n}::{u}::{p}" for n, u, p in sorted(to_upsert)])
-                if st.session_state.get("clients_db_last_sync") != sync_sig:
-                    if bool(st.session_state.get("auto_sync_ids_db", True)):
-                        odb.upsert_customer_ids_bulk(db_con, rows=to_upsert)
-                        st.session_state["clients_db_last_sync"] = sync_sig
-        except Exception as e:
-            st.warning(f"Diretório (BD): falha ao atualizar automaticamente: {e}")
+                updated = False
+                out_user = prev_user
+                out_profile = prev_profile
+                if new_user and new_user != prev_user:
+                    out_user = new_user
+                    updated = True
+                if new_profile and new_profile != prev_profile:
+                    out_profile = new_profile
+                    updated = True
+                if updated:
+                    local_dir[key] = {"user_id": out_user, "profile_id": out_profile}
+                    dir_changed = True
+
+            if dir_changed:
+                local["client_ids"] = local_dir
+                save_local_state(STATE_PATH, local)
+        except Exception:
+            # Se falhar, não bloqueia o resto do app.
+            pass
 
         with tab_summary:
             st.subheader("Resumo")
@@ -1426,8 +1138,8 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                         key=f"copyopen_disabled_msgtab_{msg_btn_key_base}",
                     )
 
-            # Guardar/atualizar IDs no diretório (BD)
-            with st.expander("Guardar IDs deste cliente (para reutilizar)", expanded=False):
+            # Guardar/atualizar IDs (sem BD): fica apenas nesta sessão/ficheiro.
+            with st.expander("Editar IDs deste cliente (sessão atual)", expanded=False):
                 cur_ids = client_ids_map.get(client_selected, {})
                 c_user = st.text_input("UserId", value=str(cur_ids.get("user_id") or ""), key=f"dir_user_{client_selected}")
                 c_profile = st.text_input(
@@ -1435,22 +1147,19 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                     value=str(cur_ids.get("profile_id") or ""),
                     key=f"dir_profile_{client_selected}",
                 )
-                if st.button("Guardar no diretório (BD)", type="primary", key=f"save_dir_{client_selected}"):
+                if st.button("Aplicar (guardar local)", type="primary", key=f"apply_ids_{client_selected}"):
+                    nu = _normalize_fb_target(c_user)
+                    np = _normalize_fb_target(c_profile)
+                    client_ids_map[client_selected] = {"user_id": nu, "profile_id": np}
                     try:
-                        odb.upsert_customer_ids(
-                            db_con,
-                            cliente=client_selected,
-                            user_id=c_user,
-                            profile_id=c_profile,
-                        )
-                        client_ids_map[client_selected] = {
-                            "user_id": _normalize_fb_target(c_user),
-                            "profile_id": _normalize_fb_target(c_profile),
-                        }
-                        st.success("Guardado no diretório (BD).")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Falha ao guardar no diretório (BD): {e}")
+                        local2 = load_local_state(STATE_PATH)
+                        local2.setdefault("client_ids", {})
+                        local2["client_ids"][str(client_selected).strip()] = {"user_id": nu, "profile_id": np}
+                        save_local_state(STATE_PATH, local2)
+                    except Exception:
+                        pass
+                    st.success("Guardado localmente (para próximos diretos).")
+                    st.rerun()
 
             st.divider()
             st.subheader("Texto final (todos os clientes)")
