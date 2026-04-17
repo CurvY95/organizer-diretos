@@ -51,6 +51,8 @@ def save_session(*, label: str, orders_for_calc: pd.DataFrame, price_overrides: 
     keep = REQUIRED_ORDERS_COLS.copy()
     if "Comentario" in orders_clean.columns:
         keep.append("Comentario")
+    if "Ativo" in orders_clean.columns:
+        keep.append("Ativo")
     orders_clean = orders_clean[keep].copy()
 
     refs = int(orders_clean["Produto"].astype(str).str.strip().str.lower().nunique())
