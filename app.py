@@ -13,7 +13,6 @@ from organizer import facebook as ofb
 from organizer import storage_local as osl
 from organizer import sessions_json as osj
 from organizer import utils as ou
-from organizer import clients_directory_gsheets as ogs
 
 
 ORDERS_ALIASES = oc.ORDERS_ALIASES
@@ -75,9 +74,6 @@ FB_PAGE_ID = ofb.FB_PAGE_ID
 _normalize_fb_target = ofb.normalize_fb_target
 build_facebook_chat_url = ofb.build_facebook_chat_url
 build_facebook_profile_url = ofb.build_facebook_profile_url
-
-_load_clients_directory_from_gsheets = ogs.load_clients_directory
-upsert_client_in_gsheets = ogs.upsert_client
 
 template_version = ou.template_version
 
@@ -206,24 +202,53 @@ except Exception as e:
 st.markdown(
     """
 <style>
-  /* layout + typography */
-  .block-container { padding-top: 1.25rem; padding-bottom: 2.5rem; max-width: 1200px; }
+  /* layout */
+  .block-container { padding-top: 1.0rem; padding-bottom: 2.5rem; max-width: 1180px; }
+
+  /* typography */
   h1, h2, h3 { letter-spacing: -0.02em; }
-  /* subtle cards */
+  .od-muted { opacity: 0.82; font-size: 0.95rem; }
+  .od-small { opacity: 0.78; font-size: 0.9rem; }
+
+  /* top header card */
+  .od-hero {
+    background: linear-gradient(135deg, rgba(99,102,241,0.16), rgba(16,185,129,0.10));
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 18px;
+    padding: 14px 16px;
+    margin-bottom: 8px;
+  }
+  .od-hero-title { font-weight: 700; font-size: 1.2rem; }
+  .od-hero-sub { margin-top: 4px; }
+
+  /* cards */
   .od-card {
     background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 14px;
-    padding: 14px 14px 10px 14px;
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 16px;
+    padding: 14px 14px 12px 14px;
   }
-  .od-muted { opacity: 0.8; font-size: 0.95rem; }
+  .od-card + .od-card { margin-top: 10px; }
+
+  /* subtle separators */
+  hr { opacity: 0.45; }
+
   /* buttons */
-  div.stButton > button, div.stDownloadButton > button {
-    border-radius: 10px;
-    padding: 0.55rem 0.9rem;
+  div.stButton > button, div.stDownloadButton > button, a[data-testid="stLinkButton"] {
+    border-radius: 12px !important;
+    padding: 0.6rem 0.95rem !important;
+    border: 1px solid rgba(255,255,255,0.14) !important;
   }
-  /* data editor */
-  [data-testid="stDataFrame"] { border-radius: 12px; overflow: hidden; }
+  div.stButton > button:hover, div.stDownloadButton > button:hover, a[data-testid="stLinkButton"]:hover {
+    border-color: rgba(255,255,255,0.24) !important;
+  }
+
+  /* dataframes + editors */
+  [data-testid="stDataFrame"] { border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,0.10); }
+  [data-testid="stDataEditor"] { border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,0.10); }
+
+  /* tabs spacing */
+  [data-testid="stTabs"] { margin-top: 6px; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -231,11 +256,18 @@ st.markdown(
 
 col_a, col_b = st.columns([3, 2], vertical_alignment="bottom")
 with col_a:
-    st.title("Organizer Diretos")
-    st.caption("Carrega o Excel (aba `Comments`), define preços no site e gera totais + mensagens prontas.")
+    st.markdown(
+        """
+<div class="od-hero">
+  <div class="od-hero-title">Organizer Diretos</div>
+  <div class="od-hero-sub od-muted">Importa o ficheiro do Tampermonkey (Comments), define preços e gera mensagens prontas — com histórico por cliente.</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
 with col_b:
     st.markdown(
-        "<div class='od-card'><div class='od-muted'><b>Dica</b>: Preenche os preços todos de uma vez e clica <b>Guardar preços</b>.</div></div>",
+        "<div class='od-card'><div class='od-muted'><b>Atalho</b>: preenche os preços todos de uma vez e clica <b>Guardar preços</b>.</div><div class='od-small' style='margin-top:6px'>Sugestão: guarda a sessão quando terminares.</div></div>",
         unsafe_allow_html=True,
     )
 
@@ -249,16 +281,15 @@ with st.sidebar:
             st.session_state.pop("loaded_session", None)
             st.rerun()
 
-    st.subheader("Upload")
-    st.caption("Este fluxo usa apenas a aba de comentários (ex.: `Comments`).")
+    st.markdown("<div class='od-muted'><b>1) Importação</b></div>", unsafe_allow_html=True)
+    st.caption("Usa a aba `Comments` (ou semelhante).")
 
-    st.subheader("Moeda")
+    st.markdown("<div class='od-muted' style='margin-top:10px'><b>2) Preferências</b></div>", unsafe_allow_html=True)
     currency = st.selectbox("Moeda", options=["EUR", "BRL", "USD"], index=0)
 
-    st.subheader("Regras de quantidade")
     fill_missing_qty = st.checkbox("Se Quantidade estiver vazia, assumir 1", value=True)
 
-    st.subheader("Mensagens")
+    st.markdown("<div class='od-muted' style='margin-top:10px'><b>3) Mensagens</b></div>", unsafe_allow_html=True)
     intro = st.text_input("Introdução", value="Oi! Segue o resumo da tua encomenda:")
     total_line_template = st.text_area(
         "Linha com total (use {total})",
@@ -267,15 +298,8 @@ with st.sidebar:
     )
     outro = st.text_input("Fecho", value="Obrigado!")
 
-    st.subheader("Diretório de clientes (Google Sheets)")
-    use_clients_dir = st.checkbox("Usar diretório de IDs (reutilizar nomes/IDs)", value=False)
-    clients_sheet_id = st.text_input("Spreadsheet ID", value=st.session_state.get("clients_sheet_id", ""))
-    clients_sheet_tab = st.text_input("Worksheet (aba)", value=st.session_state.get("clients_sheet_tab", "clients"))
-    st.session_state["use_clients_dir"] = use_clients_dir
-    st.session_state["clients_sheet_id"] = clients_sheet_id
-    st.session_state["clients_sheet_tab"] = clients_sheet_tab
-    if use_clients_dir:
-        st.caption("A Sheet deve ter colunas: Cliente, UserId, ProfileId, updated_at")
+    st.markdown("<div class='od-muted' style='margin-top:10px'><b>4) Diretório (BD)</b></div>", unsafe_allow_html=True)
+    st.caption("O app aprende e guarda IDs por cliente automaticamente.")
 
 st.divider()
 
@@ -576,12 +600,16 @@ if orders_df is not None and prices_df is not None:
                     "Quantidade": "Quantidade",
                 }
             )
+            # Soft-delete / exclude rows from totals
+            if "Incluir" not in orders_edit.columns:
+                orders_edit["Incluir"] = True
             # Force numeric dtype so the editor allows changing values reliably
             orders_edit["Quantidade"] = _coerce_number_series(orders_edit["Quantidade"])
             if fill_missing_qty:
                 orders_edit["Quantidade"] = orders_edit["Quantidade"].fillna(1.0)
 
             col_cfg = {
+                "Incluir": st.column_config.CheckboxColumn("Incluir", help="Se desativar, esta linha não entra nas contas."),
                 "Cliente": st.column_config.TextColumn("Cliente"),
                 "Referência": st.column_config.TextColumn("Referência", disabled=True),
                 "Quantidade": st.column_config.NumberColumn("Quantidade", min_value=0.0, step=0.5, format="%.3g"),
@@ -610,6 +638,9 @@ if orders_df is not None and prices_df is not None:
                     "Profile ID": "ProfileId",
                 }
             ).copy()
+            if "Incluir" in orders_for_calc.columns:
+                orders_for_calc = orders_for_calc[orders_for_calc["Incluir"].fillna(True)].copy()
+                orders_for_calc = orders_for_calc.drop(columns=["Incluir"], errors="ignore")
 
             st.divider()
             st.subheader("Guardar sessão")
@@ -805,21 +836,39 @@ if orders_df is not None and prices_df is not None:
                 "profile_id": profile_id,
             }
 
-        # Merge with shared directory (Google Sheets): only fill missing IDs.
-        clients_dir_map: dict[str, dict[str, str]] = {}
+        # Merge with directory in DB: fill missing IDs from DB, then auto-update DB when file brings new IDs.
         try:
-            if st.session_state.get("use_clients_dir") and clients_sheet_id and clients_sheet_tab:
-                clients_dir_map = _load_clients_directory_from_gsheets(clients_sheet_id, clients_sheet_tab)
-        except Exception as e:
-            st.warning(f"Diretório (Sheets): {e}")
-            clients_dir_map = {}
-
-        if clients_dir_map:
+            to_upsert: list[tuple[str, str, str]] = []
             for nome, ids in client_ids_map.items():
-                if (not (ids.get("user_id") or "").strip()) and (clients_dir_map.get(nome) or {}).get("user_id"):
-                    ids["user_id"] = (clients_dir_map[nome].get("user_id") or "").strip()
-                if (not (ids.get("profile_id") or "").strip()) and (clients_dir_map.get(nome) or {}).get("profile_id"):
-                    ids["profile_id"] = (clients_dir_map[nome].get("profile_id") or "").strip()
+                file_user = (ids.get("user_id") or "").strip()
+                file_profile = (ids.get("profile_id") or "").strip()
+
+                # Fill missing from DB
+                if not file_user or not file_profile:
+                    db_ids = odb.get_customer_ids(db_con, cliente=nome)
+                    if not file_user and db_ids.get("user_id"):
+                        ids["user_id"] = db_ids["user_id"]
+                        file_user = ids["user_id"]
+                    if not file_profile and db_ids.get("profile_id"):
+                        ids["profile_id"] = db_ids["profile_id"]
+                        file_profile = ids["profile_id"]
+
+                # If file has IDs, upsert to DB (only when changed)
+                if file_user or file_profile:
+                    db_ids = odb.get_customer_ids(db_con, cliente=nome)
+                    if (file_user and file_user != (db_ids.get("user_id") or "")) or (
+                        file_profile and file_profile != (db_ids.get("profile_id") or "")
+                    ):
+                        to_upsert.append((nome, file_user, file_profile))
+
+            if to_upsert:
+                sync_sig = "|".join([f"{n}::{u}::{p}" for n, u, p in sorted(to_upsert)])
+                if st.session_state.get("clients_db_last_sync") != sync_sig:
+                    for n, u, p in to_upsert:
+                        odb.upsert_customer_ids(db_con, cliente=n, user_id=u, profile_id=p)
+                    st.session_state["clients_db_last_sync"] = sync_sig
+        except Exception as e:
+            st.warning(f"Diretório (BD): falha ao atualizar automaticamente: {e}")
 
         with tab_summary:
             st.subheader("Resumo")
@@ -1169,34 +1218,31 @@ if orders_df is not None and prices_df is not None:
                         key=f"copyopen_disabled_msgtab_{msg_btn_key_base}",
                     )
 
-            # Guardar/atualizar IDs no diretório (Sheets)
-            if st.session_state.get("use_clients_dir"):
-                with st.expander("Guardar IDs deste cliente (para reutilizar)", expanded=False):
-                    cur_ids = client_ids_map.get(client_selected, {})
-                    c_user = st.text_input("UserId", value=str(cur_ids.get("user_id") or ""), key=f"dir_user_{client_selected}")
-                    c_profile = st.text_input(
-                        "ProfileId (username)",
-                        value=str(cur_ids.get("profile_id") or ""),
-                        key=f"dir_profile_{client_selected}",
-                    )
-                    if st.button("Guardar no diretório (Sheets)", type="primary", key=f"save_dir_{client_selected}"):
-                        try:
-                            upsert_client_in_gsheets(
-                                spreadsheet_id=clients_sheet_id,
-                                worksheet_name=clients_sheet_tab,
-                                cliente=client_selected,
-                                user_id=c_user,
-                                profile_id=c_profile,
-                            )
-                            # Update current run map too
-                            client_ids_map[client_selected] = {
-                                "user_id": _normalize_fb_target(c_user),
-                                "profile_id": _normalize_fb_target(c_profile),
-                            }
-                            st.success("Guardado no diretório.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Falha ao guardar no diretório: {e}")
+            # Guardar/atualizar IDs no diretório (BD)
+            with st.expander("Guardar IDs deste cliente (para reutilizar)", expanded=False):
+                cur_ids = client_ids_map.get(client_selected, {})
+                c_user = st.text_input("UserId", value=str(cur_ids.get("user_id") or ""), key=f"dir_user_{client_selected}")
+                c_profile = st.text_input(
+                    "ProfileId (username)",
+                    value=str(cur_ids.get("profile_id") or ""),
+                    key=f"dir_profile_{client_selected}",
+                )
+                if st.button("Guardar no diretório (BD)", type="primary", key=f"save_dir_{client_selected}"):
+                    try:
+                        odb.upsert_customer_ids(
+                            db_con,
+                            cliente=client_selected,
+                            user_id=c_user,
+                            profile_id=c_profile,
+                        )
+                        client_ids_map[client_selected] = {
+                            "user_id": _normalize_fb_target(c_user),
+                            "profile_id": _normalize_fb_target(c_profile),
+                        }
+                        st.success("Guardado no diretório (BD).")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Falha ao guardar no diretório (BD): {e}")
 
             st.divider()
             st.subheader("Texto final (todos os clientes)")

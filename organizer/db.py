@@ -114,6 +114,8 @@ def init_db(engine: Engine) -> None:
                 f"""
                 CREATE TABLE IF NOT EXISTS {customers} (
                   cliente TEXT PRIMARY KEY,
+                  user_id TEXT,
+                  profile_id TEXT,
                   notes TEXT NOT NULL DEFAULT '',
                   tags TEXT NOT NULL DEFAULT '',
                   created_at TEXT NOT NULL,
@@ -122,6 +124,21 @@ def init_db(engine: Engine) -> None:
                 """
             )
         )
+
+        # Backwards-compatible migrations (in case the table existed before these columns)
+        if not is_sqlite:
+            con.execute(text(f"ALTER TABLE {customers} ADD COLUMN IF NOT EXISTS user_id TEXT;"))
+            con.execute(text(f"ALTER TABLE {customers} ADD COLUMN IF NOT EXISTS profile_id TEXT;"))
+        else:
+            # SQLite: ADD COLUMN IF NOT EXISTS isn't supported everywhere; ignore failures.
+            try:
+                con.execute(text(f"ALTER TABLE {customers} ADD COLUMN user_id TEXT;"))
+            except Exception:
+                pass
+            try:
+                con.execute(text(f"ALTER TABLE {customers} ADD COLUMN profile_id TEXT;"))
+            except Exception:
+                pass
 
         con.execute(
             text(
@@ -188,8 +205,8 @@ def _ensure_customer_row(con, *, cliente: str, customers_table: str) -> None:
     con.execute(
         text(
             f"""
-            INSERT INTO {customers_table}(cliente, notes, tags, created_at, updated_at)
-            VALUES(:cliente, '', '', :now, :now)
+            INSERT INTO {customers_table}(cliente, user_id, profile_id, notes, tags, created_at, updated_at)
+            VALUES(:cliente, NULL, NULL, '', '', :now, :now)
             ON CONFLICT(cliente) DO NOTHING;
             """
         ),
@@ -203,11 +220,22 @@ def get_customer_meta(engine: Engine, *, cliente: str) -> dict[str, str]:
     with engine.begin() as con:
         _ensure_customer_row(con, cliente=cliente, customers_table=customers)
         r = con.execute(
-            text(f"SELECT cliente, notes, tags, created_at, updated_at FROM {customers} WHERE cliente = :cliente;"),
+            text(
+                f"SELECT cliente, user_id, profile_id, notes, tags, created_at, updated_at "
+                f"FROM {customers} WHERE cliente = :cliente;"
+            ),
             {"cliente": str(cliente or "").strip()},
         ).mappings().first()
         if not r:
-            return {"cliente": str(cliente or "").strip(), "notes": "", "tags": "", "created_at": "", "updated_at": ""}
+            return {
+                "cliente": str(cliente or "").strip(),
+                "user_id": "",
+                "profile_id": "",
+                "notes": "",
+                "tags": "",
+                "created_at": "",
+                "updated_at": "",
+            }
         return dict(r)
 
 
@@ -230,6 +258,40 @@ def upsert_customer_meta(engine: Engine, *, cliente: str, notes: str, tags: str)
             ),
             {"notes": str(notes or ""), "tags": str(tags or ""), "now": now, "cliente": cliente},
         )
+
+
+def upsert_customer_ids(engine: Engine, *, cliente: str, user_id: str, profile_id: str) -> None:
+    cliente = str(cliente or "").strip()
+    if not cliente:
+        raise ValueError("Cliente vazio.")
+    tn = _table_names(engine)
+    customers = str(tn["customers"])
+    with engine.begin() as con:
+        _ensure_customer_row(con, cliente=cliente, customers_table=customers)
+        now = _utc_now_iso()
+        con.execute(
+            text(
+                f"""
+                UPDATE {customers}
+                SET user_id = :user_id, profile_id = :profile_id, updated_at = :now
+                WHERE cliente = :cliente;
+                """
+            ),
+            {
+                "user_id": (str(user_id or "").strip() or None),
+                "profile_id": (str(profile_id or "").strip() or None),
+                "now": now,
+                "cliente": cliente,
+            },
+        )
+
+
+def get_customer_ids(engine: Engine, *, cliente: str) -> dict[str, str]:
+    meta = get_customer_meta(engine, cliente=cliente)
+    return {
+        "user_id": str(meta.get("user_id") or "").strip(),
+        "profile_id": str(meta.get("profile_id") or "").strip(),
+    }
 
 
 def upsert_session(con, *, session_id: str, created_at: str, label: str, source: str, sessions_table: str) -> None:
