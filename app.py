@@ -174,6 +174,33 @@ except Exception as e:
         "especiais sem URL-encode. Usa o Transaction pooler (porta 6543) e `sslmode=require`."
     )
     st.caption(f"Detalhe: `{type(e).__name__}`")
+    if type(e).__name__ == "ArgumentError":
+        # Try to show a safe, non-secret diagnostic for URL formatting issues.
+        try:
+            from sqlalchemy.engine import make_url
+
+            try:
+                secrets = getattr(st, "secrets", {}) or {}
+                _ = len(secrets) if hasattr(secrets, "__len__") else 0
+            except Exception:
+                secrets = {}
+
+            db_url = ""
+            if hasattr(secrets, "get"):
+                db_url = str(secrets.get("DATABASE_URL") or "").strip()
+            db_url = db_url or str(os.getenv("DATABASE_URL") or "").strip()
+            parsed = make_url(db_url)
+            q = dict(parsed.query or {})
+            st.caption(
+                "Diagnóstico (sem password): "
+                f"driver=`{parsed.drivername}`, user=`{parsed.username}`, host=`{parsed.host}`, "
+                f"port=`{parsed.port}`, db=`{parsed.database}`, sslmode=`{q.get('sslmode','')}`"
+            )
+        except Exception:
+            st.caption(
+                "Diagnóstico: o `DATABASE_URL` não está num formato válido para SQLAlchemy. "
+                "Confirma que não tem espaços/linhas novas e que a password está URL-encoded se tiver caracteres especiais."
+            )
     st.stop()
 
 st.markdown(
