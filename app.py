@@ -304,7 +304,7 @@ with st.sidebar:
 
     nav = st.radio(
         "Navegação",
-        options=["Trabalho atual", "Etiquetas 10×15", "Histórico", "Definições gerais"],
+        options=["Trabalho atual", "Etiquetas 10×15", "Clientes", "Histórico", "Definições gerais"],
         index=0,
         label_visibility="collapsed",
         key="nav_page",
@@ -352,6 +352,66 @@ if nav == "Definições gerais":
     st.session_state["intro"] = st.text_input("Introdução", value=intro)
     st.session_state["total_line_template"] = st.text_area("Linha com total (use {total})", value=total_line_template, height=70)
     st.session_state["outro"] = st.text_input("Fecho", value=outro)
+
+elif nav == "Clientes":
+    st.subheader("Clientes")
+    st.caption("Editar/criar clientes e guardar UserId/ProfileId na BD.")
+
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        search = st.text_input("Pesquisar cliente", value="", placeholder="Escreve parte do nome…", key="clientes_search")
+    with c2:
+        with st.popover("Adicionar cliente"):
+            new_name = st.text_input("Nome do cliente", value="", placeholder="Ex.: Maria Silva", key="new_customer_name")
+            if st.button("Criar", type="primary", disabled=not new_name.strip(), key="create_customer_btn"):
+                try:
+                    odb.ensure_customer(db_con, cliente=new_name.strip())
+                    st.success("Cliente criado.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Falha ao criar cliente: {e}")
+
+    try:
+        all_customers = odb.list_all_customers(db_con)
+    except Exception as e:
+        all_customers = []
+        st.error(f"DB: falha ao listar clientes: {e}")
+
+    if not all_customers:
+        st.info("Ainda não há clientes na BD. Cria um cliente ou importa um direto.")
+    else:
+        filtered = all_customers
+        if search.strip():
+            s = search.strip().lower()
+            filtered = [c for c in all_customers if s in c.lower()]
+        chosen = st.selectbox("Cliente", options=filtered or all_customers, key="clientes_pick")
+
+        try:
+            meta = odb.get_customer_meta(db_con, cliente=chosen)
+        except Exception as e:
+            meta = {"user_id": "", "profile_id": "", "notes": "", "tags": ""}
+            st.error(f"DB: falha ao carregar cliente: {e}")
+
+        st.markdown("<div class='od-card'><div class='od-muted'><b>Perfil</b></div></div>", unsafe_allow_html=True)
+        p1, p2 = st.columns([1, 1])
+        with p1:
+            user_id = st.text_input("UserId", value=str(meta.get("user_id") or ""), key="cust_user_id_edit")
+            profile_id = st.text_input("ProfileId (username)", value=str(meta.get("profile_id") or ""), key="cust_profile_id_edit")
+        with p2:
+            tags = st.text_input("Tags (vírgulas)", value=str(meta.get("tags") or ""), key="cust_tags_edit")
+            notes = st.text_area("Notas internas", value=str(meta.get("notes") or ""), height=140, key="cust_notes_edit")
+
+        csave1, csave2 = st.columns([1, 2])
+        with csave1:
+            if st.button("Guardar cliente", type="primary", key="save_customer_profile_btn"):
+                try:
+                    odb.upsert_customer_ids(db_con, cliente=chosen, user_id=user_id, profile_id=profile_id)
+                    odb.upsert_customer_meta(db_con, cliente=chosen, notes=notes, tags=tags)
+                    st.success("Guardado.")
+                except Exception as e:
+                    st.error(f"Falha ao guardar: {e}")
+        with csave2:
+            st.caption("Dica: podes preencher UserId/ProfileId aqui mesmo que o ficheiro não traga IDs.")
 
 elif nav == "Histórico":
     st.subheader("Histórico")
@@ -568,22 +628,34 @@ else:
 
 if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and prices_df is not None:
     try:
-        if nav == "Trabalho atual":
-            tab_comments, tab_upload, tab_prices, tab_summary, tab_messages, tab_labels = st.tabs(
-                ["0) Comentários", "1) Encomendas (Comments)", "2) Preços", "3) Resumo", "4) Mensagens", "5) Etiquetas 10×15"]
-            )
-        else:
-            tab_comments, tab_upload, tab_prices, tab_summary, tab_messages, tab_labels = st.tabs(
-                ["1) Encomendas", "2) Preços", "3) Resumo", "4) Mensagens", "5) Etiquetas 10×15", "0) Comentários"]
-            )
+        tab_comments, tab_upload, tab_prices, tab_summary, tab_messages, tab_labels = st.tabs(
+            ["0) Comentários", "1) Encomendas (Comments)", "2) Preços", "3) Resumo", "4) Mensagens", "5) Etiquetas 10×15"]
+        )
 
         with tab_comments:
             st.subheader("Comentários (texto original)")
-            st.caption("Mostra o comentário real captado no Tampermonkey, se vier no Excel/CSV.")
+            st.caption("Comentários ligados ao rascunho (editar/remover reflete em todo o lado).")
 
-            orders_view = _standardize_df_columns(orders_df)
-            orders_view = _apply_aliases(orders_view, ORDERS_ALIASES)
-            _validate_required_cols(orders_view, REQUIRED_ORDERS_COLS, "Encomendas (Comments)")
+            # Use the shared draft if available (keeps tabs in sync)
+            if "orders_draft" in st.session_state and isinstance(st.session_state["orders_draft"], pd.DataFrame):
+                draft = st.session_state["orders_draft"].copy()
+                # normalize column name for comment if present
+                if "Comentário" in draft.columns and "Comentario" not in draft.columns:
+                    draft = draft.rename(columns={"Comentário": "Comentario"})
+                orders_view = draft.rename(
+                    columns={
+                        "User ID": "UserId",
+                        "Profile ID": "ProfileId",
+                        "Referência": "Produto",
+                        "Quantidade": "Quantidade",
+                        "Hora": "Hora",
+                        "Comentario": "Comentario",
+                    }
+                )
+            else:
+                orders_view = _standardize_df_columns(orders_df)
+                orders_view = _apply_aliases(orders_view, ORDERS_ALIASES)
+                _validate_required_cols(orders_view, REQUIRED_ORDERS_COLS, "Encomendas (Comments)")
 
             cols = ["Cliente"]
             if "UserId" in orders_view.columns:
@@ -623,6 +695,23 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                 st.text_area("Comentário(s)", value=combined or "—", height=200, disabled=True, key="comments_text")
                 st.dataframe(vc, width="stretch")
 
+                cbtn1, cbtn2 = st.columns([1, 2])
+                with cbtn1:
+                    if st.button("Remover comentários deste cliente", type="secondary", key="remove_comments_client"):
+                        if "orders_draft" in st.session_state and isinstance(st.session_state["orders_draft"], pd.DataFrame):
+                            od = st.session_state["orders_draft"].copy()
+                            if "Comentário" in od.columns:
+                                od.loc[od["Cliente"].astype(str) == str(client_c), "Comentário"] = ""
+                            elif "Comentario" in od.columns:
+                                od.loc[od["Cliente"].astype(str) == str(client_c), "Comentario"] = ""
+                            st.session_state["orders_draft"] = od
+                            st.success("Comentários removidos.")
+                            st.rerun()
+                        else:
+                            st.warning("Abra a aba 'Encomendas' para criar o rascunho antes de remover.")
+                with cbtn2:
+                    st.caption("Isto remove o texto do comentário no rascunho e desaparece do resumo/mensagens/etiquetas/histórico.")
+
         with tab_upload:
             st.subheader("Encomendas")
             st.caption("Edite as quantidades aqui. As outras abas refletem estas quantidades.")
@@ -641,6 +730,8 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                 ui_cols.append("ProfileId")
             if "Hora" in orders_edit.columns:
                 ui_cols.append("Hora")
+            if "Comentario" in orders_edit.columns:
+                ui_cols.append("Comentario")
             ui_cols += ["Produto", "Quantidade"]
 
             orders_edit = orders_edit[ui_cols].copy()
@@ -650,6 +741,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                     "UserId": "User ID",
                     "ProfileId": "Profile ID",
                     "Hora": "Hora",
+                    "Comentario": "Comentário",
                     "Produto": "Referência",
                     "Quantidade": "Quantidade",
                 }
@@ -657,10 +749,17 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
             # Soft-delete / exclude rows from totals
             if "Incluir" not in orders_edit.columns:
                 orders_edit["Incluir"] = True
+
+            # Keep one shared draft across tabs/pages
+            if st.session_state.get("orders_draft_source") != (orders_source_label or "") or "orders_draft" not in st.session_state:
+                st.session_state["orders_draft_source"] = (orders_source_label or "")
+                st.session_state["orders_draft"] = orders_edit.copy()
+            orders_draft = st.session_state["orders_draft"].copy()
+
             # Force numeric dtype so the editor allows changing values reliably
-            orders_edit["Quantidade"] = _coerce_number_series(orders_edit["Quantidade"])
+            orders_draft["Quantidade"] = _coerce_number_series(orders_draft["Quantidade"])
             if fill_missing_qty:
-                orders_edit["Quantidade"] = orders_edit["Quantidade"].fillna(1.0)
+                orders_draft["Quantidade"] = orders_draft["Quantidade"].fillna(1.0)
 
             col_cfg = {
                 "Incluir": st.column_config.CheckboxColumn("Incluir", help="Se desativar, esta linha não entra nas contas."),
@@ -669,6 +768,8 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                 "Referência": st.column_config.TextColumn("Referência", disabled=True),
                 "Quantidade": st.column_config.NumberColumn("Quantidade", min_value=0.0, step=0.5, format="%.3g"),
             }
+            if "Comentário" in orders_draft.columns:
+                col_cfg["Comentário"] = st.column_config.TextColumn("Comentário", help="Editar/apagar aqui reflete em todo o lado.")
             if "User ID" in orders_edit.columns:
                 col_cfg["User ID"] = st.column_config.TextColumn("User ID", disabled=True)
 
@@ -676,7 +777,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                 col_cfg["Profile ID"] = st.column_config.TextColumn("Profile ID", disabled=True)
 
             edited_orders = st.data_editor(
-                orders_edit,
+                orders_draft,
                 width="stretch",
                 num_rows="fixed",
                 column_config={
@@ -684,6 +785,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                 },
                 key="comments_editor",
             )
+            st.session_state["orders_draft"] = edited_orders.copy()
 
             # Convert back to expected input shape
             orders_for_calc = edited_orders.rename(
@@ -691,6 +793,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                     "Referência": "Produto",
                     "User ID": "UserId",
                     "Profile ID": "ProfileId",
+                    "Comentário": "Comentario",
                 }
             ).copy()
             if "Incluir" in orders_for_calc.columns:
@@ -1334,6 +1437,8 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
         with tab_labels:
             st.subheader("Etiquetas 10×15 (imprimir)")
             st.caption("Uma etiqueta por linha de produto: nome, referência+quantidade, preço unitário e (opcional) hora.")
+            if nav == "Etiquetas 10×15":
+                st.info("Dica: nesta página, a tab principal é a **5) Etiquetas 10×15**.")
 
             base = merged.dropna(subset=["Preco"]).copy()
             has_hora = "Hora" in base.columns

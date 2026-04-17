@@ -294,6 +294,38 @@ def get_customer_ids(engine: Engine, *, cliente: str) -> dict[str, str]:
     }
 
 
+def ensure_customer(engine: Engine, *, cliente: str) -> None:
+    cliente = str(cliente or "").strip()
+    if not cliente:
+        raise ValueError("Cliente vazio.")
+    tn = _table_names(engine)
+    customers = str(tn["customers"])
+    with engine.begin() as con:
+        _ensure_customer_row(con, cliente=cliente, customers_table=customers)
+
+
+def list_all_customers(engine: Engine, limit: int = 5000) -> list[str]:
+    """
+    Lists customers from `customers` table (includes clients without orders/items).
+    """
+    tn = _table_names(engine)
+    customers = str(tn["customers"])
+    with engine.begin() as con:
+        rows = con.execute(
+            text(
+                f"""
+                SELECT cliente
+                FROM {customers}
+                WHERE cliente IS NOT NULL AND TRIM(cliente) <> ''
+                ORDER BY cliente ASC
+                LIMIT :lim;
+                """
+            ),
+            {"lim": int(limit)},
+        ).mappings().all()
+        return [str(r["cliente"]) for r in rows]
+
+
 def upsert_session(con, *, session_id: str, created_at: str, label: str, source: str, sessions_table: str) -> None:
     con.execute(
         text(
