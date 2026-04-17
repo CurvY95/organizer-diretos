@@ -412,14 +412,14 @@ elif nav == "Histórico":
                 st.markdown("<div class='od-muted'><b>Top produtos</b></div>", unsafe_allow_html=True)
                 try:
                     top = odb.customer_top_products(db_con, cliente=cliente_h, limit=50)
-                    st.dataframe(pd.DataFrame(top), use_container_width=True)
+                    st.dataframe(pd.DataFrame(top), width="stretch")
                 except Exception as e:
                     st.error(f"DB: falha ao listar top produtos: {e}")
             with ct2:
                 st.markdown("<div class='od-muted'><b>Diretos anteriores</b></div>", unsafe_allow_html=True)
                 try:
                     sess = odb.customer_sessions(db_con, cliente=cliente_h, limit=50)
-                    st.dataframe(pd.DataFrame(sess), use_container_width=True)
+                    st.dataframe(pd.DataFrame(sess), width="stretch")
                 except Exception as e:
                     st.error(f"DB: falha ao listar sessões: {e}")
 
@@ -427,7 +427,7 @@ elif nav == "Histórico":
             st.markdown("<div class='od-muted'><b>Linhas (histórico completo)</b></div>", unsafe_allow_html=True)
             try:
                 hist_rows = odb.customer_history(db_con, cliente=cliente_h)
-                st.dataframe(pd.DataFrame(hist_rows), use_container_width=True)
+                st.dataframe(pd.DataFrame(hist_rows), width="stretch")
             except Exception as e:
                 st.error(f"DB: falha ao buscar histórico: {e}")
 
@@ -447,7 +447,7 @@ elif nav == "Histórico":
                     "path": "Arquivo",
                 }
             )
-            st.dataframe(sessions_df.drop(columns=["Arquivo"]), use_container_width=True)
+            st.dataframe(sessions_df.drop(columns=["Arquivo"]), width="stretch")
 
             st.divider()
             st.subheader("Migrar sessões (JSON) → Base de dados")
@@ -621,7 +621,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                 combined = "\n\n---\n\n".join(dict.fromkeys(raw_comments)).strip()
 
                 st.text_area("Comentário(s)", value=combined or "—", height=200, disabled=True, key="comments_text")
-                st.dataframe(vc, use_container_width=True)
+                st.dataframe(vc, width="stretch")
 
         with tab_upload:
             st.subheader("Encomendas")
@@ -677,7 +677,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
 
             edited_orders = st.data_editor(
                 orders_edit,
-                use_container_width=True,
+                width="stretch",
                 num_rows="fixed",
                 column_config={
                     **col_cfg,
@@ -752,7 +752,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
             with st.form("prices_form", border=False):
                 edited = st.data_editor(
                     st.session_state["price_draft"],
-                    use_container_width=True,
+                    width="stretch",
                     num_rows="fixed",
                     column_config={
                         "Produto": st.column_config.TextColumn("Referência", disabled=True),
@@ -778,13 +778,22 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
             st.session_state["price_draft"] = edited.copy()
 
             if do_save:
+                new_overrides: dict[str, float] = {}
                 for _, r in edited.iterrows():
-                    k = str(r["ProdutoKey"]).strip().lower()
-                    v = r["Preco"]
+                    k = str(r.get("ProdutoKey") or "").strip().lower()
+                    if not k:
+                        continue
+                    v = r.get("Preco")
                     if pd.notna(v):
-                        st.session_state["price_overrides"][k] = float(v)
+                        new_overrides[k] = float(v)
+                st.session_state["price_overrides"] = new_overrides
+                st.session_state["prices_last_saved_at"] = pd.Timestamp.utcnow().isoformat()
                 st.success("Preços guardados. As outras abas já usam estes valores.")
                 st.rerun()
+
+            saved_count = len(st.session_state.get("price_overrides") or {})
+            last_saved = st.session_state.get("prices_last_saved_at") or ""
+            st.caption(f"Guardados: **{saved_count}** referência(s)" + (f" · Último save: `{last_saved}`" if last_saved else ""))
 
             overrides_df = pd.DataFrame(
                 [{"ProdutoKey": k, "Preco": v} for k, v in st.session_state["price_overrides"].items()]
@@ -942,7 +951,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
 
             summary_display = summary.copy()
             summary_display["Total"] = summary_display["Total"].map(lambda v: format_currency(float(v), currency))
-            st.dataframe(summary_display, use_container_width=True)
+            st.dataframe(summary_display, width="stretch")
 
             st.subheader("Detalhe por cliente")
             tpl_ver = template_version(intro, total_line_template, outro)
@@ -1018,14 +1027,14 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                             st.link_button(
                                 "ABRIR CHAT",
                                 chat_or_inbox_url,
-                                use_container_width=True,
+                                width="stretch",
                                 key=f"open_chat_{btn_key_base}",
                             )
                         else:
                             st.link_button(
                                 "ABRIR INBOX",
                                 chat_or_inbox_url,
-                                use_container_width=True,
+                                width="stretch",
                                 help="Sem UserID/ProfileID; abre o Inbox da página para pesquisar pelo nome.",
                                 key=f"open_inbox_{btn_key_base}",
                             )
@@ -1034,14 +1043,14 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                             st.link_button(
                                 "ABRIR PERFIL",
                                 profile_url,
-                                use_container_width=True,
+                                width="stretch",
                                 key=f"open_profile_{btn_key_base}",
                             )
                         else:
                             st.link_button(
                                 "ABRIR PERFIL",
                                 "about:blank",
-                                use_container_width=True,
+                                width="stretch",
                                 disabled=True,
                                 key=f"open_profile_disabled_{btn_key_base}",
                             )
@@ -1084,7 +1093,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                             st.link_button(
                                 "COPIAR + ABRIR CHAT",
                                 "about:blank",
-                                use_container_width=True,
+                                width="stretch",
                                 disabled=True,
                                 key=f"copyopen_disabled_{btn_key_base}",
                             )
@@ -1112,7 +1121,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                     d2 = details.get(client).copy()
                     d2["Preco"] = d2["Preco"].map(lambda v: format_currency(float(v), currency))
                     d2["TotalItem"] = d2["TotalItem"].map(lambda v: format_currency(float(v), currency))
-                    st.dataframe(d2, use_container_width=True)
+                    st.dataframe(d2, width="stretch")
 
         with tab_messages:
             st.subheader("Mensagens")
@@ -1202,14 +1211,14 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                     st.link_button(
                         "ABRIR CHAT",
                         chat_or_inbox_url,
-                        use_container_width=True,
+                        width="stretch",
                         key=f"open_chat_msgtab_{msg_btn_key_base}",
                     )
                 else:
                     st.link_button(
                         "ABRIR INBOX",
                         chat_or_inbox_url,
-                        use_container_width=True,
+                        width="stretch",
                         help="Sem UserID/ProfileID; abre o Inbox da página para pesquisar pelo nome.",
                         key=f"open_inbox_msgtab_{msg_btn_key_base}",
                     )
@@ -1218,14 +1227,14 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                     st.link_button(
                         "ABRIR PERFIL",
                         profile_url,
-                        use_container_width=True,
+                        width="stretch",
                         key=f"open_profile_msgtab_{msg_btn_key_base}",
                     )
                 else:
                     st.link_button(
                         "ABRIR PERFIL",
                         "about:blank",
-                        use_container_width=True,
+                        width="stretch",
                         disabled=True,
                         key=f"open_profile_disabled_msgtab_{msg_btn_key_base}",
                     )
@@ -1268,7 +1277,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                     st.link_button(
                         "COPIAR + ABRIR CHAT",
                         "about:blank",
-                        use_container_width=True,
+                        width="stretch",
                         disabled=True,
                         key=f"copyopen_disabled_msgtab_{msg_btn_key_base}",
                     )
@@ -1353,7 +1362,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
 
             edited_labels = st.data_editor(
                 labels_df,
-                use_container_width=True,
+                width="stretch",
                 num_rows="fixed",
                 column_config={
                     "Imprimir": st.column_config.CheckboxColumn("Imprimir"),
