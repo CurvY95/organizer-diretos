@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from organizer import core as oc
+from organizer import db as odb
 from organizer import facebook as ofb
 from organizer import storage_local as osl
 from organizer import sessions_json as osj
@@ -105,11 +106,19 @@ def require_login() -> None:
         return
 
     with st.sidebar:
-        st.divider()
-        st.subheader("Login")
-        u = st.text_input("Utilizador", key="auth_user")
-        p = st.text_input("Password", type="password", key="auth_pass")
-        do_login = st.button("Entrar", type="primary")
+        st.markdown(
+            """
+<div class="od-nav">
+  <div class="od-nav-title">Diretos <span style="opacity:0.55;font-weight:700">Pro</span></div>
+  <div class="od-nav-sub od-muted">Acesso reservado ao painel</div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+        st.markdown("<div class='od-card-h' style='margin:0.5rem 0 0.35rem'>Credenciais</div>", unsafe_allow_html=True)
+        u = st.text_input("Utilizador", key="auth_user", placeholder="O teu utilizador")
+        p = st.text_input("Password", type="password", key="auth_pass", placeholder="••••••••")
+        do_login = st.button("Entrar no painel", type="primary", width="stretch")
         if do_login:
             if u == expected_user and p == expected_pass:
                 st.session_state["authenticated"] = True
@@ -118,6 +127,18 @@ def require_login() -> None:
             else:
                 st.error("Credenciais inválidas.")
 
+    _, mid, _ = st.columns([1, 2.2, 1])
+    with mid:
+        st.markdown(
+            """
+<div class="od-hero" style="margin-top:1rem">
+  <div class="od-hero-kicker">Organizer <span class="od-badge">Pro</span></div>
+  <div class="od-hero-title">Fecha o teu direto com precisão</div>
+  <div class="od-hero-sub od-muted">Preços, mensagens por cliente, etiquetas e histórico — num único fluxo comercial. Utiliza o login à esquerda para continuar.</div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
     st.stop()
 
 
@@ -130,97 +151,329 @@ load_session = osj.load_session
 delete_session = osj.delete_session
 
 
-st.set_page_config(page_title="Organizer Diretos", layout="wide", page_icon="🧾")
+def _db_cache_key() -> str:
+    try:
+        secrets = getattr(st, "secrets", {}) or {}
+        _ = len(secrets) if hasattr(secrets, "__len__") else 0
+    except Exception:
+        secrets = {}
+    url = ""
+    schema = ""
+    if hasattr(secrets, "get"):
+        url = str(secrets.get("DATABASE_URL") or "").strip()
+        schema = str(secrets.get("DB_SCHEMA") or "").strip()
+    url = url or str(os.getenv("DATABASE_URL") or "").strip()
+    schema = schema or str(os.getenv("DB_SCHEMA") or "").strip()
+    return f"{schema}|{url}"
 
-require_login()
+
+@st.cache_resource
+def _db_engine_cached(cache_key: str):
+    # Liga à BD (Postgres se DATABASE_URL, senão SQLite em `saved/organizer.db`).
+    eng = odb.connect()
+    odb.init_db(eng)
+    return eng
+
+
+def _db_engine():
+    return _db_engine_cached(_db_cache_key())
+
+
+def _is_postgres_engine(engine) -> bool:
+    try:
+        return str(engine.url).startswith("postgresql")
+    except Exception:
+        return False
+
+
+def _client_ids_from_orders_df(df: pd.DataFrame) -> dict[str, dict[str, str]]:
+    if df is None or df.empty:
+        return {}
+    d = df.copy()
+    if "UserId" not in d.columns:
+        d["UserId"] = ""
+    if "ProfileId" not in d.columns:
+        d["ProfileId"] = ""
+    out: dict[str, dict[str, str]] = {}
+    for _, r in d.drop_duplicates(subset=["Cliente"]).iterrows():
+        cliente = str(r["Cliente"]).strip()
+        user_id = str(r.get("UserId") or "").strip()
+        profile_id = str(r.get("ProfileId") or "").strip()
+        if user_id.lower() == "nan":
+            user_id = ""
+        if profile_id.lower() == "nan":
+            profile_id = ""
+        out[cliente] = {"user_id": user_id, "profile_id": profile_id}
+    return out
+
+
+def _merge_ids_fill_missing(
+    base: dict[str, dict[str, str]],
+    *layers: dict[str, dict[str, str]],
+) -> dict[str, dict[str, str]]:
+    """Preenche user_id/profile_id em falta a partir de camadas (ficheiro tem prioridade)."""
+    out = {k: dict(v) for k, v in base.items()}
+    for layer in layers:
+        for nome, ids in layer.items():
+            if nome not in out:
+                continue
+            cur = out[nome]
+            if not (cur.get("user_id") or "").strip() and (ids.get("user_id") or "").strip():
+                cur["user_id"] = str(ids.get("user_id") or "").strip()
+            if not (cur.get("profile_id") or "").strip() and (ids.get("profile_id") or "").strip():
+                cur["profile_id"] = str(ids.get("profile_id") or "").strip()
+    return out
+
+
+def _merged_session_rows() -> list[dict]:
+    loc = list_sessions()
+    eng = _db_engine()
+    try:
+        cloud = odb.list_sessions_with_payload(eng)
+    except Exception:
+        cloud = []
+    by_id: dict[str, dict] = {str(s.get("id")): s for s in loc}
+    for s in cloud:
+        sid = str(s.get("id") or "")
+        if sid:
+            by_id[sid] = s
+    rows = list(by_id.values())
+    rows.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
+    return rows
+
+
+st.set_page_config(page_title="Diretos Pro — Organizer", layout="wide", page_icon="✦")
 
 st.markdown(
     """
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <style>
-  /* layout */
-  .block-container { padding-top: 1.0rem; padding-bottom: 2.5rem; max-width: 1180px; }
-
-  /* typography */
-  h1, h2, h3 { letter-spacing: -0.02em; }
-  .od-muted { opacity: 0.82; font-size: 0.95rem; }
-  .od-small { opacity: 0.78; font-size: 0.9rem; }
-
-  /* top header card */
-  .od-hero {
-    background: linear-gradient(135deg, rgba(99,102,241,0.16), rgba(16,185,129,0.10));
-    border: 1px solid rgba(255,255,255,0.10);
-    border-radius: 18px;
-    padding: 14px 16px;
-    margin-bottom: 8px;
+  :root {
+    --od-font: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+    --od-accent: #22d3ee;
+    --od-accent-dim: rgba(34, 211, 238, 0.12);
+    --od-line: rgba(148, 163, 184, 0.18);
+    --od-glow: rgba(34, 211, 238, 0.35);
   }
-  .od-hero-title { font-weight: 700; font-size: 1.2rem; }
-  .od-hero-sub { margin-top: 4px; }
 
-  /* cards */
+  html, body, [class*="css"] { font-family: var(--od-font) !important; }
+
+  .stApp {
+    background: radial-gradient(1200px 600px at 10% -10%, rgba(34, 211, 238, 0.08), transparent 55%),
+                radial-gradient(900px 500px at 100% 0%, rgba(99, 102, 241, 0.10), transparent 50%),
+                linear-gradient(180deg, #070b12 0%, #0a0f1a 100%) !important;
+  }
+
+  .block-container {
+    padding-top: 1.25rem;
+    padding-bottom: 3rem;
+    max-width: 1200px;
+  }
+
+  h1, h2, h3 { letter-spacing: -0.03em; font-weight: 700 !important; color: #f8fafc !important; }
+  .stCaption, [data-testid="stCaptionContainer"] { color: #94a3b8 !important; }
+
+  .od-muted { color: #94a3b8 !important; font-size: 0.95rem; line-height: 1.5; }
+  .od-small { color: #64748b !important; font-size: 0.875rem; line-height: 1.45; }
+
+  .od-hero {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.75) 100%);
+    border: 1px solid var(--od-line);
+    border-radius: 20px;
+    padding: 1.35rem 1.5rem 1.25rem;
+    margin-bottom: 0.5rem;
+    box-shadow: 0 24px 48px -24px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255,255,255,0.03) inset;
+  }
+  .od-hero::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, var(--od-accent), #818cf8, #34d399);
+    opacity: 0.95;
+  }
+  .od-hero-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--od-accent) !important;
+    margin-bottom: 0.5rem;
+  }
+  .od-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    background: var(--od-accent-dim);
+    color: #ecfeff !important;
+    border: 1px solid rgba(34, 211, 238, 0.35);
+  }
+  .od-hero-title {
+    font-weight: 800;
+    font-size: clamp(1.35rem, 2.5vw, 1.65rem);
+    letter-spacing: -0.04em;
+    color: #f8fafc !important;
+    line-height: 1.2;
+  }
+  .od-hero-sub { margin-top: 0.55rem; max-width: 42rem; }
+
+  .od-pill-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+  .od-pill {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #cbd5e1 !important;
+    padding: 0.35rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid var(--od-line);
+    background: rgba(15, 23, 42, 0.5);
+  }
+
   .od-card {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.10);
-    border-radius: 16px;
-    padding: 14px 14px 12px 14px;
+    background: linear-gradient(165deg, rgba(30, 41, 59, 0.55) 0%, rgba(15, 23, 42, 0.4) 100%);
+    border: 1px solid var(--od-line);
+    border-radius: 18px;
+    padding: 1rem 1.1rem 0.95rem;
+    box-shadow: 0 16px 40px -28px rgba(0,0,0,0.5);
+  }
+  .od-card-h {
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #94a3b8 !important;
+    margin-bottom: 0.35rem;
   }
   .od-card + .od-card { margin-top: 10px; }
 
-  /* subtle separators */
-  hr { opacity: 0.45; }
+  hr { border: none; border-top: 1px solid var(--od-line); opacity: 1; }
 
-  /* buttons */
   div.stButton > button, div.stDownloadButton > button, a[data-testid="stLinkButton"] {
     border-radius: 12px !important;
-    padding: 0.6rem 0.95rem !important;
-    border: 1px solid rgba(255,255,255,0.14) !important;
+    padding: 0.55rem 1rem !important;
+    font-weight: 600 !important;
+    border: 1px solid var(--od-line) !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease !important;
   }
   div.stButton > button:hover, div.stDownloadButton > button:hover, a[data-testid="stLinkButton"]:hover {
-    border-color: rgba(255,255,255,0.24) !important;
+    border-color: rgba(34, 211, 238, 0.45) !important;
+    box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.12) !important;
+  }
+  div.stButton > button[data-testid="baseButton-primary"],
+  button[kind="primary"] {
+    background: linear-gradient(135deg, #0891b2 0%, #06b6d4 45%, #22d3ee 100%) !important;
+    color: #042f2e !important;
+    border: none !important;
+    font-weight: 700 !important;
+    box-shadow: 0 8px 24px -8px var(--od-glow) !important;
+  }
+  div.stButton > button[data-testid="baseButton-primary"]:hover {
+    filter: brightness(1.06);
+    box-shadow: 0 12px 28px -8px var(--od-glow) !important;
   }
 
-  /* dataframes + editors */
-  [data-testid="stDataFrame"] { border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,0.10); }
-  [data-testid="stDataEditor"] { border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,0.10); }
-
-  /* tabs spacing */
-  [data-testid="stTabs"] { margin-top: 6px; }
-
-  /* sidebar / navbar */
-  section[data-testid="stSidebar"] > div {
-    padding-top: 0.9rem;
+  [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
+    border-radius: 14px !important;
+    overflow: hidden !important;
+    border: 1px solid var(--od-line) !important;
+    box-shadow: 0 4px 24px -12px rgba(0,0,0,0.35);
   }
+
+  [data-testid="stTabs"] { margin-top: 8px; }
+  [data-testid="stTabs"] [role="tablist"] {
+    gap: 0.35rem;
+    background: rgba(15, 23, 42, 0.55);
+    padding: 0.35rem;
+    border-radius: 14px;
+    border: 1px solid var(--od-line);
+  }
+  [data-testid="stTabs"] button[role="tab"] {
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    padding: 0.45rem 0.85rem !important;
+  }
+  [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+    background: rgba(34, 211, 238, 0.14) !important;
+    color: #ecfeff !important;
+  }
+
+  section[data-testid="stSidebar"] > div { padding-top: 1rem; }
+  section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0c1220 0%, #0a0e17 100%) !important;
+    border-right: 1px solid var(--od-line) !important;
+  }
+  [data-testid="stSidebar"] .stRadio > label { font-weight: 700 !important; font-size: 0.8rem !important; color: #64748b !important; letter-spacing: 0.04em; text-transform: uppercase; }
+  [data-testid="stSidebar"] .stRadio label p { font-weight: 600 !important; font-size: 0.95rem !important; color: #e2e8f0 !important; }
+
   .od-nav {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.10);
+    background: linear-gradient(165deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.35) 100%);
+    border: 1px solid var(--od-line);
     border-radius: 16px;
-    padding: 12px 12px 10px 12px;
-    margin-bottom: 10px;
+    padding: 1rem 1rem 0.85rem;
+    margin-bottom: 12px;
+    box-shadow: 0 12px 32px -20px rgba(0,0,0,0.45);
   }
-  .od-nav-title { font-weight: 800; letter-spacing: -0.02em; font-size: 1.05rem; }
-  .od-nav-sub { margin-top: 4px; }
+  .od-nav-title { font-weight: 800; letter-spacing: -0.03em; font-size: 1.08rem; color: #f8fafc !important; }
+  .od-nav-sub { margin-top: 0.25rem; font-size: 0.8rem !important; }
   .od-nav ul { list-style: none; padding-left: 0; margin: 10px 0 0 0; }
   .od-nav li { padding: 6px 8px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); margin-bottom: 8px; }
   .od-nav li:last-child { margin-bottom: 0; }
   .od-nav li b { font-weight: 750; }
+
+  [data-testid="stExpander"] details {
+    border: 1px solid var(--od-line) !important;
+    border-radius: 14px !important;
+    background: rgba(15, 23, 42, 0.35) !important;
+  }
+
+  div[data-testid="stMetric"] {
+    background: rgba(15, 23, 42, 0.45);
+    border: 1px solid var(--od-line);
+    border-radius: 14px;
+    padding: 0.65rem 0.75rem;
+  }
 </style>
 """,
     unsafe_allow_html=True,
 )
+
+require_login()
 
 col_a, col_b = st.columns([3, 2], vertical_alignment="bottom")
 with col_a:
     st.markdown(
         """
 <div class="od-hero">
+  <div class="od-hero-kicker">Vendas em direto <span class="od-badge">Pro</span></div>
   <div class="od-hero-title">Organizer Diretos</div>
-  <div class="od-hero-sub od-muted">Importa o ficheiro do Tampermonkey (Comments), define preços e gera mensagens prontas — com histórico por cliente.</div>
+  <div class="od-hero-sub od-muted">Do export do Tampermonkey ao cliente final: preços, resumos, mensagens e etiquetas — num fluxo único, com histórico e sessões guardadas.</div>
+  <div class="od-pill-row">
+    <span class="od-pill">Importar Comments</span>
+    <span class="od-pill">Preços &amp; totais</span>
+    <span class="od-pill">Mensagens + Facebook</span>
+    <span class="od-pill">Etiquetas 10×15</span>
+  </div>
 </div>
 """,
         unsafe_allow_html=True,
     )
 with col_b:
     st.markdown(
-        "<div class='od-card'><div class='od-muted'><b>Atalho</b>: preenche os preços todos de uma vez e clica <b>Guardar preços</b>.</div><div class='od-small' style='margin-top:6px'>Sugestão: guarda a sessão quando terminares.</div></div>",
+        """
+<div class="od-card">
+  <div class="od-card-h">Fluxo recomendado</div>
+  <div class="od-muted">1) Encomendas &nbsp;→&nbsp; 2) <b>Guardar preços</b> &nbsp;→&nbsp; 3) Resumo / Mensagens</div>
+  <div class="od-small" style="margin-top:10px">No fim, <b>Guardar sessão</b> para recuperar preços e rascunho noutro dia ou noutro PC (com base de dados).</div>
+</div>
+""",
         unsafe_allow_html=True,
     )
 
@@ -230,8 +483,8 @@ with st.sidebar:
     st.markdown(
         """
 <div class="od-nav">
-  <div class="od-nav-title">Organizer Diretos</div>
-  <div class="od-nav-sub od-muted">Menu</div>
+  <div class="od-nav-title">Diretos <span style="opacity:0.55;font-weight:700">Pro</span></div>
+  <div class="od-nav-sub od-muted">Operação comercial pós-live</div>
 </div>
 """,
         unsafe_allow_html=True,
@@ -246,7 +499,7 @@ with st.sidebar:
     )
 
     st.divider()
-    st.header("Conta")
+    st.markdown("<div class='od-card-h' style='margin-bottom:0.35rem'>Conta</div>", unsafe_allow_html=True)
     if st.session_state.get("authenticated") is True:
         if st.button("Sair"):
             st.session_state["authenticated"] = False
@@ -280,7 +533,13 @@ if nav == "Definições gerais":
         st.session_state["currency"] = st.selectbox("Moeda", options=["EUR", "BRL", "USD"], index=["EUR", "BRL", "USD"].index(currency))
         st.session_state["fill_missing_qty"] = st.checkbox("Se Quantidade estiver vazia, assumir 1", value=fill_missing_qty)
     with c2:
-        st.markdown("<div class='od-card'><div class='od-muted'><b>Dica</b></div><div class='od-small' style='margin-top:6px'>Guarda a sessão quando terminares para reutilizar preços e dados.</div></div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='od-card'><div class='od-muted'><b>Dica</b></div><div class='od-small' style='margin-top:6px'>"
+            "No Streamlit Cloud, configura <code>DATABASE_URL</code> (Postgres) em segredos para persistir "
+            "sessões e IDs — só quando clicas <b>Guardar sessão</b> / <b>Aplicar</b>."
+            "</div></div>",
+            unsafe_allow_html=True,
+        )
 
     st.divider()
     st.subheader("Mensagens")
@@ -289,9 +548,11 @@ if nav == "Definições gerais":
     st.session_state["outro"] = st.text_input("Fecho", value=outro)
 
 elif nav == "Histórico":
-    st.subheader("Histórico")
     st.subheader("Histórico de sessões")
-    sessions = list_sessions()
+    st.caption(
+        "Lista **ficheiros locais** (`saved/sessions/`) e **sessões com JSON na base de dados** (quando `DATABASE_URL` está configurado)."
+    )
+    sessions = _merged_session_rows()
     if not sessions:
         st.info("Ainda não há sessões guardadas.")
     else:
@@ -305,7 +566,10 @@ elif nav == "Histórico":
                 "path": "Arquivo",
             }
         )
-        st.dataframe(sessions_df.drop(columns=["Arquivo"]), width="stretch")
+        show_df = sessions_df.drop(columns=["Arquivo"]).copy()
+        if _is_postgres_engine(_db_engine()):
+            show_df.insert(0, "Onde", sessions_df["Arquivo"].map(lambda p: "Nuvem (BD)" if str(p).startswith("db:") else "Local"))
+        st.dataframe(show_df, width="stretch")
 
         chosen = st.selectbox(
             "Abrir sessão",
@@ -315,16 +579,32 @@ elif nav == "Histórico":
         c1, c2 = st.columns([1, 1])
         with c1:
             if st.button("Abrir", type="primary"):
-                data = load_session(chosen["path"])
-                st.session_state["loaded_session"] = data
-                st.success("Sessão carregada. Vá à aba 'Trabalho atual'.")
+                p = str(chosen.get("path") or "")
+                try:
+                    if p.startswith("db:"):
+                        sid = p.split(":", 1)[1]
+                        data = odb.get_session_payload(_db_engine(), session_id=sid) or {}
+                    else:
+                        data = load_session(p)
+                    if not data.get("orders"):
+                        st.error("Sessão vazia ou não encontrada.")
+                    else:
+                        st.session_state["loaded_session"] = data
+                        st.success("Sessão carregada. Vá a **Trabalho atual**.")
+                except Exception as e:
+                    st.error(f"Falha ao abrir: {e}")
         with c2:
             with st.popover("Apagar sessão"):
-                st.warning("Isto apaga a sessão localmente (não dá para recuperar).")
+                st.warning("Isto apaga esta sessão (local e/ou na base de dados). Não dá para recuperar.")
                 confirm = st.checkbox("Confirmo que quero apagar", value=False, key="confirm_delete_session")
                 if st.button("Apagar definitivamente", type="secondary", disabled=not confirm):
                     try:
-                        delete_session(chosen["path"])
+                        p = str(chosen.get("path") or "")
+                        if p.startswith("db:"):
+                            sid = p.split(":", 1)[1]
+                            odb.delete_session_by_id(_db_engine(), session_id=sid)
+                        else:
+                            delete_session(p)
                         loaded = st.session_state.get("loaded_session") or {}
                         if loaded.get("id") == chosen.get("id"):
                             st.session_state.pop("loaded_session", None)
@@ -566,13 +846,62 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                 if st.button("Guardar sessão", type="primary"):
                     if "price_overrides" not in st.session_state:
                         st.session_state["price_overrides"] = {}
-                    sid = save_session(
+                    eng = _db_engine()
+                    local_st = load_local_state(STATE_PATH)
+                    local_dir = local_st.get("client_ids") or {}
+                    if not isinstance(local_dir, dict):
+                        local_dir = {}
+                    base_ids = _client_ids_from_orders_df(orders_for_calc)
+                    bulk: dict[str, dict[str, str]] = {}
+                    try:
+                        bulk = odb.get_customer_ids_bulk(eng, clientes=list(base_ids.keys()))
+                    except Exception:
+                        bulk = {}
+                    merged_ids = _merge_ids_fill_missing(base_ids, local_dir, bulk)
+                    sid, payload = save_session(
                         label=session_label.strip(),
                         orders_for_calc=orders_for_calc,
                         price_overrides=st.session_state.get("price_overrides") or {},
                         meta={"source": orders_source_label or ""},
                     )
-                    st.success(f"Sessão guardada: {sid}")
+                    try:
+                        odb.save_session_payload(eng, payload)
+                    except Exception as e:
+                        st.warning(f"Não gravei a sessão na base de dados: {e}")
+                    rows_up: list[tuple[str, str, str]] = []
+                    for nome, ids in merged_ids.items():
+                        u = (ids.get("user_id") or "").strip()
+                        p = (ids.get("profile_id") or "").strip()
+                        if u or p:
+                            rows_up.append((str(nome).strip(), u, p))
+                    if rows_up:
+                        try:
+                            odb.upsert_customer_ids_bulk(eng, rows=rows_up)
+                        except Exception as e:
+                            st.warning(f"Não atualizei os IDs na base de dados: {e}")
+                    try:
+                        local_st2 = load_local_state(STATE_PATH)
+                        local_st2.setdefault("client_ids", {})
+                        for nome, ids in merged_ids.items():
+                            k = str(nome).strip()
+                            if not k:
+                                continue
+                            u = (ids.get("user_id") or "").strip()
+                            p = (ids.get("profile_id") or "").strip()
+                            if not u and not p:
+                                continue
+                            prev = local_st2["client_ids"].get(k) or {}
+                            out_u = str(prev.get("user_id") or "").strip()
+                            out_p = str(prev.get("profile_id") or "").strip()
+                            if u:
+                                out_u = u
+                            if p:
+                                out_p = p
+                            local_st2["client_ids"][k] = {"user_id": out_u, "profile_id": out_p}
+                        save_local_state(STATE_PATH, local_st2)
+                    except Exception:
+                        pass
+                    st.success(f"Sessão guardada: {sid} (ficheiro local + base de dados, se configurada).")
 
         parsed = parse_inputs(
             orders_for_calc,
@@ -584,6 +913,14 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
 
         parsed_orders_fp = stable_orders_fingerprint(parsed.orders)
         local = load_local_state(STATE_PATH)
+        eng_ids = _db_engine()
+        if st.session_state.get("_ids_bulk_fp") != parsed_orders_fp:
+            st.session_state["_ids_bulk_fp"] = parsed_orders_fp
+            try:
+                client_names_bulk = parsed.orders["Cliente"].dropna().astype(str).str.strip().unique().tolist()
+                st.session_state["_ids_bulk_map"] = odb.get_customer_ids_bulk(eng_ids, clientes=list(client_names_bulk))
+            except Exception:
+                st.session_state["_ids_bulk_map"] = {}
         saved_by_fp = (local.get("by_orders_fp") or {}).get(parsed_orders_fp) or {}
         # Nota: preços podem mudar de direto para direto. Não reutilizamos automaticamente preços
         # guardados localmente; apenas dentro de sessões carregadas/guardadas.
@@ -665,13 +1002,10 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
         )
         merged = apply_price_overrides(parsed.merged, overrides_df)
 
-        # Stable "direto session id" for DB snapshots: reuse loaded session id when available,
-        # otherwise create one per run and keep it in session_state.
+        # ID estável reutilizado quando abres uma sessão guardada.
         if "history_session_id" not in st.session_state:
             loaded = st.session_state.get("loaded_session") or {}
             st.session_state["history_session_id"] = loaded.get("id") or safe_session_id(now_iso())
-
-        # Nota: sem BD. O histórico continua a ser gerido por sessões guardadas (JSON).
 
         still_missing = merged[merged["Preco"].isna()][["ProdutoKey", "Produto"]].drop_duplicates()
         if not still_missing.empty:
@@ -695,7 +1029,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                     st.write(f"Falha no diagnóstico: {e}")
 
         by_client, details = build_summary(merged.dropna(subset=["Preco"]))
-        client_ids_map: dict[str, dict[str, str]] = {}
+        file_ids_map: dict[str, dict[str, str]] = {}
 
         tmp_cols = ["Cliente"]
         if "UserId" in parsed.orders.columns:
@@ -726,31 +1060,27 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
             if profile_id.lower() == "nan":
                 profile_id = ""
 
-            client_ids_map[cliente] = {
+            file_ids_map[cliente] = {
                 "user_id": user_id,
                 "profile_id": profile_id,
             }
 
-        # Diretório local (persistente neste PC): preenche IDs em falta e aprende novos IDs.
-        try:
-            local_dir = local.get("client_ids") or {}
-            if not isinstance(local_dir, dict):
-                local_dir = {}
+        local_dir_ids = local.get("client_ids") or {}
+        if not isinstance(local_dir_ids, dict):
+            local_dir_ids = {}
+        _bulk_ids_layer = st.session_state.get("_ids_bulk_map") or {}
+        client_ids_map = _merge_ids_fill_missing(file_ids_map, local_dir_ids, _bulk_ids_layer)
 
+        # Aprende IDs novos do ficheiro → `organizer_state.json` (SQLite/local). Com Postgres não gravamos a cada rerun.
+        try:
+            local_dir = dict(local_dir_ids)
             dir_changed = False
-            for nome, ids in client_ids_map.items():
+            for nome, ids in file_ids_map.items():
                 key = str(nome).strip()
                 saved = local_dir.get(key) or {}
                 if not isinstance(saved, dict):
                     saved = {}
 
-                # Fill missing from local directory
-                if not (ids.get("user_id") or "").strip() and (saved.get("user_id") or "").strip():
-                    ids["user_id"] = str(saved.get("user_id") or "").strip()
-                if not (ids.get("profile_id") or "").strip() and (saved.get("profile_id") or "").strip():
-                    ids["profile_id"] = str(saved.get("profile_id") or "").strip()
-
-                # Learn/update local directory when we have something non-empty
                 new_user = str(ids.get("user_id") or "").strip()
                 new_profile = str(ids.get("profile_id") or "").strip()
                 prev_user = str(saved.get("user_id") or "").strip()
@@ -769,11 +1099,10 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                     local_dir[key] = {"user_id": out_user, "profile_id": out_profile}
                     dir_changed = True
 
-            if dir_changed:
+            if dir_changed and not _is_postgres_engine(eng_ids):
                 local["client_ids"] = local_dir
                 save_local_state(STATE_PATH, local)
         except Exception:
-            # Se falhar, não bloqueia o resto do app.
             pass
 
         with tab_summary:
@@ -1140,7 +1469,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                     )
 
             # Guardar/atualizar IDs (sem BD): fica apenas nesta sessão/ficheiro.
-            with st.expander("Editar IDs deste cliente (sessão atual)", expanded=False):
+            with st.expander("Editar IDs deste cliente", expanded=False):
                 cur_ids = client_ids_map.get(client_selected, {})
                 c_user = st.text_input("UserId", value=str(cur_ids.get("user_id") or ""), key=f"dir_user_{client_selected}")
                 c_profile = st.text_input(
@@ -1148,7 +1477,7 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                     value=str(cur_ids.get("profile_id") or ""),
                     key=f"dir_profile_{client_selected}",
                 )
-                if st.button("Aplicar (guardar local)", type="primary", key=f"apply_ids_{client_selected}"):
+                if st.button("Aplicar (guardar)", type="primary", key=f"apply_ids_{client_selected}"):
                     nu = _normalize_fb_target(c_user)
                     np = _normalize_fb_target(c_profile)
                     client_ids_map[client_selected] = {"user_id": nu, "profile_id": np}
@@ -1159,7 +1488,16 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                         save_local_state(STATE_PATH, local2)
                     except Exception:
                         pass
-                    st.success("Guardado localmente (para próximos diretos).")
+                    try:
+                        odb.upsert_customer_ids(
+                            _db_engine(),
+                            cliente=str(client_selected).strip(),
+                            user_id=nu,
+                            profile_id=np,
+                        )
+                    except Exception as e:
+                        st.warning(f"Não gravei os IDs na base de dados: {e}")
+                    st.success("Guardado (ficheiro local + base de dados, se configurada).")
                     st.rerun()
 
             st.divider()

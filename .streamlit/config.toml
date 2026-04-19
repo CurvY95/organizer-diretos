@@ -1,0 +1,8 @@
+# Tema comercial (B2B / SaaS) — alinhado com o CSS em app.py
+[theme]
+base = "dark"
+primaryColor = "#22d3ee"
+backgroundColor = "#070b12"
+secondaryBackgroundColor = "#0f1629"
+textColor = "#f1f5f9"
+font = "sans serif"

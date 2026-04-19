@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -152,6 +153,15 @@ def init_db(engine: Engine) -> None:
                 """
             )
         )
+
+        # Full session JSON (guardado só quando o utilizador clica "Guardar sessão")
+        if is_sqlite:
+            try:
+                con.execute(text(f"ALTER TABLE {sessions} ADD COLUMN payload_json TEXT;"))
+            except Exception:
+                pass
+        else:
+            con.execute(text(f"ALTER TABLE {sessions} ADD COLUMN IF NOT EXISTS payload_json TEXT;"))
 
         # SERIAL works in Postgres; SQLite ignores but requires INTEGER PRIMARY KEY.
         if is_sqlite:
@@ -650,5 +660,116 @@ def session_exists(engine: Engine, *, session_id: str) -> bool:
             {"id": str(session_id or "").strip()},
         ).first()
         return r is not None
+
+
+def save_session_payload(engine: Engine, payload: dict[str, Any]) -> None:
+    """
+    Grava JSON completo da sessão (o mesmo formato que `saved/sessions/*.json`).
+    Usado só quando o utilizador clica explicitamente em "Guardar sessão".
+    """
+    if not payload or not payload.get("id"):
+        raise ValueError("payload inválido (falta id).")
+    pid = str(payload["id"])
+    created_at = str(payload.get("created_at") or "")
+    label = str(payload.get("label") or "")
+    source = str((payload.get("meta") or {}).get("source") or "")
+    blob = json.dumps(payload, ensure_ascii=False)
+    tn = _table_names(engine)
+    sessions = str(tn["sessions"])
+    with engine.begin() as con:
+        con.execute(
+            text(
+                f"""
+                INSERT INTO {sessions}(id, created_at, label, source, payload_json)
+                VALUES(:id, :created_at, :label, :source, :payload_json)
+                ON CONFLICT(id) DO UPDATE SET
+                  created_at=excluded.created_at,
+                  label=excluded.label,
+                  source=excluded.source,
+                  payload_json=excluded.payload_json;
+                """
+            ),
+            {
+                "id": pid,
+                "created_at": created_at,
+                "label": label,
+                "source": source,
+                "payload_json": blob,
+            },
+        )
+
+
+def get_session_payload(engine: Engine, *, session_id: str) -> Optional[dict[str, Any]]:
+    session_id = str(session_id or "").strip()
+    if not session_id:
+        return None
+    tn = _table_names(engine)
+    sessions = str(tn["sessions"])
+    with engine.begin() as con:
+        r = con.execute(
+            text(f"SELECT payload_json FROM {sessions} WHERE id = :id LIMIT 1;"),
+            {"id": session_id},
+        ).mappings().first()
+    if not r:
+        return None
+    raw = r.get("payload_json")
+    if raw is None or str(raw).strip() == "":
+        return None
+    try:
+        return json.loads(str(raw))
+    except Exception:
+        return None
+
+
+def list_sessions_with_payload(engine: Engine, limit: int = 200) -> list[dict[str, Any]]:
+    """
+    Lista sessões que tenham JSON guardado (não inclui linhas antigas só com items normalizados).
+    """
+    tn = _table_names(engine)
+    sessions = str(tn["sessions"])
+    with engine.begin() as con:
+        rows = con.execute(
+            text(
+                f"""
+                SELECT id, created_at, label, source, payload_json
+                FROM {sessions}
+                WHERE payload_json IS NOT NULL AND TRIM(payload_json) <> ''
+                ORDER BY created_at DESC
+                LIMIT :lim;
+                """
+            ),
+            {"lim": int(limit)},
+        ).mappings().all()
+
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        pj = r.get("payload_json")
+        try:
+            pobj = json.loads(str(pj)) if pj else {}
+        except Exception:
+            pobj = {}
+        out.append(
+            {
+                "id": r.get("id"),
+                "created_at": r.get("created_at") or "",
+                "label": r.get("label") or "",
+                "orders_rows": int(pobj.get("orders_rows") or 0),
+                "refs": int(pobj.get("refs") or 0),
+                "path": f'db:{r.get("id")}',
+            }
+        )
+    return out
+
+
+def delete_session_by_id(engine: Engine, *, session_id: str) -> None:
+    session_id = str(session_id or "").strip()
+    if not session_id:
+        return
+    tn = _table_names(engine)
+    sessions = str(tn["sessions"])
+    items = str(tn["items"])
+    with engine.begin() as con:
+        con.execute(text(f"DELETE FROM {items} WHERE session_id = :sid;"), {"sid": session_id})
+        con.execute(text(f"DELETE FROM {sessions} WHERE id = :sid;"), {"sid": session_id})
 
 

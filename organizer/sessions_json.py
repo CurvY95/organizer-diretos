@@ -38,11 +38,11 @@ def list_sessions() -> list[dict[str, Any]]:
     return out
 
 
-def save_session(*, label: str, orders_for_calc: pd.DataFrame, price_overrides: dict, meta: dict) -> str:
-    os.makedirs(SESSIONS_DIR, exist_ok=True)
+def build_session_payload(
+    *, label: str, orders_for_calc: pd.DataFrame, price_overrides: dict, meta: dict
+) -> tuple[str, dict[str, Any]]:
     created_at = now_iso()
     sid = safe_session_id(created_at)
-    path = os.path.join(SESSIONS_DIR, f"{sid}.json")
 
     orders_clean = orders_for_calc.copy()
     orders_clean = standardize_df_columns(orders_clean)
@@ -57,7 +57,7 @@ def save_session(*, label: str, orders_for_calc: pd.DataFrame, price_overrides: 
 
     refs = int(orders_clean["Produto"].astype(str).str.strip().str.lower().nunique())
 
-    payload = {
+    payload: dict[str, Any] = {
         "id": sid,
         "created_at": created_at,
         "label": label,
@@ -67,9 +67,21 @@ def save_session(*, label: str, orders_for_calc: pd.DataFrame, price_overrides: 
         "orders": orders_clean.to_dict(orient="records"),
         "price_overrides": price_overrides or {},
     }
+    return sid, payload
+
+
+def save_session(*, label: str, orders_for_calc: pd.DataFrame, price_overrides: dict, meta: dict) -> tuple[str, dict[str, Any]]:
+    os.makedirs(SESSIONS_DIR, exist_ok=True)
+    sid, payload = build_session_payload(
+        label=label,
+        orders_for_calc=orders_for_calc,
+        price_overrides=price_overrides,
+        meta=meta or {},
+    )
+    path = os.path.join(SESSIONS_DIR, f"{sid}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
-    return sid
+    return sid, payload
 
 
 def load_session(session_path: str) -> dict[str, Any]:
