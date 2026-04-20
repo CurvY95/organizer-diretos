@@ -2191,11 +2191,9 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         f"Sem etiquetas porque não há preços aplicados. "
                         f"(Com preço: {priced_rows} · Preços guardados: {saved_prices})"
                     )
+                # `Hora` é sempre o timestamp do vídeo (m:ss ou h:mm:ss). Usamos para ordenar, não imprime.
                 has_hora = "Hora" in base.columns
-                agg_spec = {"Quantidade": ("Quantidade", "sum"), "Preco": ("Preco", "max")}
-                if has_hora:
-                    # keep Hora only to sort labels chronologically (not printed)
-                    agg_spec["Hora"] = ("Hora", "min")
+                agg_spec = {"Quantidade": ("Quantidade", "sum"), "Preco": ("Preco", "max"), "Hora": ("Hora", "min")}
 
                 labels_df = (
                     base.groupby(["Cliente", "Produto"], as_index=False)
@@ -2210,7 +2208,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     horizontal=True,
                     key="labels_pick_mode",
                 )
-                # Ordenação (opção do user): Hora (timestamp) ou Nome
+                # Ordenação (na tabela e na impressão)
                 def _parse_hora_to_timedelta(s: str) -> Optional[pd.Timedelta]:
                     s = str(s or "").strip().replace(" ", "")
                     if not s:
@@ -2230,34 +2228,32 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         return None
                     return None
 
-                order_options = (["Hora (timestamp)", "Nome"] if has_hora else ["Nome"])
                 order = st.selectbox(
                     "Ordenar por",
-                    options=order_options,
+                    options=["Hora (↑)", "Hora (↓)", "Nome (A→Z)"],
                     index=0,
                     key="labels_order",
                     help="Hora é o timestamp do vídeo (m:ss ou h:mm:ss). Não aparece impresso.",
                 )
 
-                if order.startswith("Hora") and has_hora:
-                    dt = labels_df["Hora"].map(_parse_hora_to_timedelta)
-                    # Coluna auxiliar para veres a ordenação na tabela (não é impressa).
-                    labels_df["Ordem"] = dt.map(lambda x: (int(x.total_seconds()) if pd.notna(x) else None))
+                # Sempre calcula Ordem para veres na tabela
+                dt = labels_df["Hora"].map(_parse_hora_to_timedelta) if "Hora" in labels_df.columns else pd.Series([None] * len(labels_df))
+                labels_df["Ordem"] = dt.map(lambda x: (int(x.total_seconds()) if pd.notna(x) else None))
+
+                if order.startswith("Hora"):
+                    asc = "↑" in order
                     labels_df = (
                         labels_df.assign(_HoraSort=dt)
-                        .sort_values(["_HoraSort", "Cliente", "Referência"], na_position="last")
+                        .sort_values(["_HoraSort", "Cliente", "Referência"], ascending=[asc, True, True], na_position="last")
                         .drop(columns=["_HoraSort"])
                     )
                     with st.expander("Diagnóstico ordenação (Hora)", expanded=False):
-                        demo = labels_df[["Cliente", "Referência", "Hora"]].copy()
-                        demo["_parsed"] = demo["Hora"].map(_parse_hora_to_timedelta)
-                        ok = int(demo["_parsed"].notna().sum())
+                        demo = labels_df[["Cliente", "Referência", "Hora", "Ordem"]].copy()
+                        ok = int(demo["Ordem"].notna().sum())
                         total = int(demo.shape[0])
                         st.caption(f"Linhas com Hora parseada: **{ok}/{total}**")
                         st.dataframe(demo.head(25), width="stretch")
                 else:
-                    if "Ordem" in labels_df.columns:
-                        labels_df = labels_df.drop(columns=["Ordem"], errors="ignore")
                     labels_df = labels_df.sort_values(["Cliente", "Referência"])
 
                 if mode == "Selecionar (uma/várias)":
@@ -2273,14 +2269,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         "Referência": st.column_config.TextColumn("Referência", disabled=True),
                         "Quantidade": st.column_config.NumberColumn("Qtd", disabled=True, format="%.3g"),
                         "Preco": st.column_config.NumberColumn("Preço unit.", disabled=True, format="%.2f"),
-                        **(
-                            {
-                                "Hora": st.column_config.TextColumn("Hora (timestamp)", disabled=True),
-                                "Ordem": st.column_config.NumberColumn("Ordem", disabled=True, format="%d"),
-                            }
-                            if ("Hora" in labels_df.columns and "Ordem" in labels_df.columns)
-                            else ({"Hora": st.column_config.TextColumn("Hora (timestamp)", disabled=True)} if "Hora" in labels_df.columns else {})
-                        ),
+                        "Hora": st.column_config.TextColumn("Hora (timestamp)", disabled=True),
+                        "Ordem": st.column_config.NumberColumn("Ordem", disabled=True, format="%d"),
                     },
                     key="labels_editor",
                 )
@@ -2334,7 +2324,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
             blocks: list[dict] = []
             chosen_rows = edited_labels[edited_labels["Imprimir"].fillna(False)].copy()
-            if ("Hora" in chosen_rows.columns) and str(st.session_state.get("labels_order") or "").startswith("Hora"):
+            order = str(st.session_state.get("labels_order") or "")
+            if ("Hora" in chosen_rows.columns) and order.startswith("Hora"):
                 def _parse_hora_to_seconds(s: str) -> Optional[int]:
                     s = str(s or "").strip().replace(" ", "")
                     if not s:
@@ -2355,10 +2346,14 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     return None
 
                 chosen_rows["_HoraSort"] = chosen_rows["Hora"].map(_parse_hora_to_seconds)
+                asc = "↑" in order
                 chosen_rows = chosen_rows.sort_values(
                     by=["_HoraSort", "Cliente", "Referência"],
+                    ascending=[asc, True, True],
                     na_position="last",
                 ).drop(columns=["_HoraSort"])
+            else:
+                chosen_rows = chosen_rows.sort_values(by=["Cliente", "Referência"])
             for _, row in chosen_rows.iterrows():
                 blocks.append(
                     {
