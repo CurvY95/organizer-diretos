@@ -2158,43 +2158,57 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         f"(Com preço: {priced_rows} · Preços guardados: {saved_prices})"
                     )
                 has_hora = "Hora" in base.columns
-            agg_spec = {"Quantidade": ("Quantidade", "sum"), "Preco": ("Preco", "max")}
-            if has_hora:
-                agg_spec["Hora"] = ("Hora", "min")
+                agg_spec = {"Quantidade": ("Quantidade", "sum"), "Preco": ("Preco", "max")}
+                if has_hora:
+                    agg_spec["Hora"] = ("Hora", "min")
 
-            labels_df = (
-                base.groupby(["Cliente", "Produto"], as_index=False)
-                .agg(**{k: v for k, v in agg_spec.items()})
-                .rename(columns={"Produto": "Referência"})
-            )
-            labels_df["Imprimir"] = True
+                labels_df = (
+                    base.groupby(["Cliente", "Produto"], as_index=False)
+                    .agg(**{k: v for k, v in agg_spec.items()})
+                    .rename(columns={"Produto": "Referência"})
+                )
+                labels_df["Imprimir"] = True
 
-            mode = st.radio("Etiquetas", options=["Selecionar (uma/várias)", "Todas"], horizontal=True, key="labels_pick_mode")
-            order = st.selectbox("Ordenar por", options=(["Nome"] + (["Hora"] if has_hora else [])), index=0, key="labels_order")
-            if order == "Nome":
-                labels_df = labels_df.sort_values(["Cliente", "Referência"])
-            elif order == "Hora" and has_hora:
-                # Try to sort by parsed datetime; fallback to raw string
-                dt = pd.to_datetime(labels_df["Hora"], errors="coerce", dayfirst=True)
-                labels_df = labels_df.assign(_HoraSort=dt).sort_values(["_HoraSort", "Cliente", "Referência"]).drop(columns=["_HoraSort"])
+                mode = st.radio(
+                    "Etiquetas",
+                    options=["Selecionar (uma/várias)", "Todas"],
+                    horizontal=True,
+                    key="labels_pick_mode",
+                )
+                order = st.selectbox(
+                    "Ordenar por",
+                    options=(["Nome"] + (["Hora"] if has_hora else [])),
+                    index=0,
+                    key="labels_order",
+                )
+                if order == "Nome":
+                    labels_df = labels_df.sort_values(["Cliente", "Referência"])
+                elif order == "Hora" and has_hora:
+                    # Try to sort by parsed datetime; fallback to raw string
+                    dt = pd.to_datetime(labels_df["Hora"], errors="coerce", dayfirst=True)
+                    labels_df = (
+                        labels_df.assign(_HoraSort=dt)
+                        .sort_values(["_HoraSort", "Cliente", "Referência"])
+                        .drop(columns=["_HoraSort"])
+                    )
 
-            if mode == "Selecionar (uma/várias)":
-                labels_df["Imprimir"] = False
+                if mode == "Selecionar (uma/várias)":
+                    labels_df["Imprimir"] = False
 
-            edited_labels = st.data_editor(
-                labels_df,
-                width="stretch",
-                num_rows="fixed",
-                column_config={
-                    "Imprimir": st.column_config.CheckboxColumn("Imprimir"),
-                    "Cliente": st.column_config.TextColumn("Cliente", disabled=True),
-                    "Referência": st.column_config.TextColumn("Referência", disabled=True),
-                    "Quantidade": st.column_config.NumberColumn("Qtd", disabled=True, format="%.3g"),
-                    "Preco": st.column_config.NumberColumn("Preço unit.", disabled=True, format="%.2f"),
-                    **({"Hora": st.column_config.TextColumn("Hora", disabled=True)} if has_hora else {}),
-                },
-                key="labels_editor",
-            )
+                edited_labels = st.data_editor(
+                    labels_df,
+                    width="stretch",
+                    num_rows="fixed",
+                    column_config={
+                        "Imprimir": st.column_config.CheckboxColumn("Imprimir"),
+                        "Cliente": st.column_config.TextColumn("Cliente", disabled=True),
+                        "Referência": st.column_config.TextColumn("Referência", disabled=True),
+                        "Quantidade": st.column_config.NumberColumn("Qtd", disabled=True, format="%.3g"),
+                        "Preco": st.column_config.NumberColumn("Preço unit.", disabled=True, format="%.2f"),
+                        **({"Hora": st.column_config.TextColumn("Hora", disabled=True)} if has_hora else {}),
+                    },
+                    key="labels_editor",
+                )
 
             def labels_html(blocks: list[dict]) -> str:
                 parts = []
@@ -2280,52 +2294,55 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
         save_local_state(STATE_PATH, local)
         st.caption(f"Salvo localmente em `{STATE_PATH}`")
 
-        with tab_messages:
-            c1, c2 = st.columns(2)
-            with c1:
-                st.download_button(
-                    "Download texto (.txt)",
-                    data=(final_text.encode("utf-8") if "final_text" in locals() else b""),
-                    file_name="mensagens_por_pessoa.txt",
-                    mime="text/plain",
-                )
-            with c2:
-                if "summary" in locals():
-                    csv_bytes = summary.to_csv(index=False).encode("utf-8")
-                else:
-                    csv_bytes = b""
-                st.download_button(
-                    "Download resumo (.csv)",
-                    data=csv_bytes,
-                    file_name="resumo_por_pessoa.csv",
-                    mime="text/csv",
-                )
+        # Downloads / export: show on relevant pages only
+        if tab_messages is not None:
+            with tab_messages:
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.download_button(
+                        "Download texto (.txt)",
+                        data=(final_text.encode("utf-8") if "final_text" in locals() else b""),
+                        file_name="mensagens_por_pessoa.txt",
+                        mime="text/plain",
+                    )
+                with c2:
+                    if "summary" in locals():
+                        csv_bytes = summary.to_csv(index=False).encode("utf-8")
+                    else:
+                        csv_bytes = b""
+                    st.download_button(
+                        "Download resumo (.csv)",
+                        data=csv_bytes,
+                        file_name="resumo_por_pessoa.csv",
+                        mime="text/csv",
+                    )
 
         # Export cleaned comments for Excel (incl. optional UserId)
-        with tab_upload:
-            st.divider()
-            st.subheader("Exportar encomendas (para Excel)")
-            export_df = orders_for_calc.copy()
-            cols_out = ["Cliente"]
-            if "UserId" in export_df.columns:
-                cols_out.append("UserId")
-            if "ProfileId" in export_df.columns:
-                cols_out.append("ProfileId")
-            cols_out += ["Produto", "Quantidade"]
-            export_df = export_df[cols_out].rename(
-                columns={
-                    "UserId": "user_id",
-                    "ProfileId": "profile_id",
-                    "Produto": "referencia",
-                    "Quantidade": "quantidade",
-                }
-            )
-            st.download_button(
-                "Download encomendas (.csv)",
-                data=export_df.to_csv(index=False).encode("utf-8"),
-                file_name="encomendas_comments.csv",
-                mime="text/csv",
-            )
+        if tab_upload is not None:
+            with tab_upload:
+                st.divider()
+                st.subheader("Exportar encomendas (para Excel)")
+                export_df = orders_for_calc.copy()
+                cols_out = ["Cliente"]
+                if "UserId" in export_df.columns:
+                    cols_out.append("UserId")
+                if "ProfileId" in export_df.columns:
+                    cols_out.append("ProfileId")
+                cols_out += ["Produto", "Quantidade"]
+                export_df = export_df[cols_out].rename(
+                    columns={
+                        "UserId": "user_id",
+                        "ProfileId": "profile_id",
+                        "Produto": "referencia",
+                        "Quantidade": "quantidade",
+                    }
+                )
+                st.download_button(
+                    "Download encomendas (.csv)",
+                    data=export_df.to_csv(index=False).encode("utf-8"),
+                    file_name="encomendas_comments.csv",
+                    mime="text/csv",
+                )
 
     except Exception as e:
         st.error(str(e))
