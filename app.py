@@ -2241,6 +2241,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
                 if order.startswith("Hora") and has_hora:
                     dt = labels_df["Hora"].map(_parse_hora_to_timedelta)
+                    # Coluna auxiliar para veres a ordenação na tabela (não é impressa).
+                    labels_df["Ordem"] = dt.map(lambda x: (int(x.total_seconds()) if pd.notna(x) else None))
                     labels_df = (
                         labels_df.assign(_HoraSort=dt)
                         .sort_values(["_HoraSort", "Cliente", "Referência"], na_position="last")
@@ -2254,6 +2256,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         st.caption(f"Linhas com Hora parseada: **{ok}/{total}**")
                         st.dataframe(demo.head(25), width="stretch")
                 else:
+                    if "Ordem" in labels_df.columns:
+                        labels_df = labels_df.drop(columns=["Ordem"], errors="ignore")
                     labels_df = labels_df.sort_values(["Cliente", "Referência"])
 
                 if mode == "Selecionar (uma/várias)":
@@ -2269,6 +2273,14 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         "Referência": st.column_config.TextColumn("Referência", disabled=True),
                         "Quantidade": st.column_config.NumberColumn("Qtd", disabled=True, format="%.3g"),
                         "Preco": st.column_config.NumberColumn("Preço unit.", disabled=True, format="%.2f"),
+                        **(
+                            {
+                                "Hora": st.column_config.TextColumn("Hora (timestamp)", disabled=True),
+                                "Ordem": st.column_config.NumberColumn("Ordem", disabled=True, format="%d"),
+                            }
+                            if ("Hora" in labels_df.columns and "Ordem" in labels_df.columns)
+                            else ({"Hora": st.column_config.TextColumn("Hora (timestamp)", disabled=True)} if "Hora" in labels_df.columns else {})
+                        ),
                     },
                     key="labels_editor",
                 )
