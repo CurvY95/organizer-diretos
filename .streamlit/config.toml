@@ -1,9 +1,9 @@
-# Tema comercial (B2B / SaaS). A cor de destaque em runtime pode ser sobrescrita por
-# st.secrets / env: BRAND_PRIMARY (ex.: #7c3aed). Coloca o logo em assets/logo.png ou BRAND_LOGO_PATH.
+# Tema comercial. A cor de destaque em runtime pode ser sobrescrita por
+# st.secrets / env: BRAND_PRIMARY. Coloca o logo em assets/logo.png ou BRAND_LOGO_PATH.
 [theme]
-base = "dark"
-primaryColor = "#22d3ee"
-backgroundColor = "#070b12"
-secondaryBackgroundColor = "#0f1629"
-textColor = "#f1f5f9"
+base = "light"
+primaryColor = "#16803c"
+backgroundColor = "#f4f6f5"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#111312"
 font = "sans serif"

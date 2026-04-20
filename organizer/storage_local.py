@@ -15,8 +15,15 @@ def load_local_state(path: str) -> dict[str, Any]:
 
 def save_local_state(path: str, data: dict[str, Any]) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    new_payload = json.dumps(data, ensure_ascii=False, indent=2)
+    try:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                if f.read() == new_payload:
+                    return
+    except Exception:
+        pass
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write(new_payload)
     os.replace(tmp, path)
-

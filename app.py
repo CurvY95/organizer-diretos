@@ -87,6 +87,42 @@ def _read_csv_bytes_best_effort(raw: bytes, *, sep: str, force_text: bool = True
     return pd.read_csv(io.BytesIO(raw), sep=sep)
 
 
+def _csv_separator_from_bytes(raw: bytes) -> str:
+    sample = raw[:4096].decode("utf-8-sig", errors="ignore")
+    first_line = (sample.splitlines() or [""])[0]
+    return ";" if first_line.count(";") > first_line.count(",") else ","
+
+
+@st.cache_data(show_spinner=False, max_entries=20)
+def _cached_read_orders_csv(raw: bytes, sep: str) -> pd.DataFrame:
+    return _read_csv_bytes_best_effort(raw, sep=sep, force_text=True)
+
+
+@st.cache_data(show_spinner=False, max_entries=20)
+def _cached_excel_sheet_names(raw: bytes) -> list[str]:
+    excel = pd.ExcelFile(io.BytesIO(raw))
+    return list(excel.sheet_names)
+
+
+@st.cache_data(show_spinner=False, max_entries=50)
+def _cached_read_excel_sheet(raw: bytes, sheet_name: str, *, force_text: bool) -> pd.DataFrame:
+    return pd.read_excel(io.BytesIO(raw), sheet_name=sheet_name, dtype=(str if force_text else None))
+
+
+def _detect_sheet_from_names(sheet_names: list[str], kind: str) -> Optional[str]:
+    if not sheet_names:
+        return None
+    if kind == "orders":
+        keywords = ["encom", "pedido", "order", "orders", "clientes", "comment", "comments"]
+    else:
+        keywords = ["preco", "preços", "precos", "price", "prices", "produto", "produtos"]
+    lowered = {name: str(name).lower() for name in sheet_names}
+    for name, lname in lowered.items():
+        if any(k in lname for k in keywords):
+            return name
+    return sheet_names[0]
+
+
 _coerce_number_series = oc.coerce_number_series
 _standardize_df_columns = oc.standardize_df_columns
 _apply_aliases = oc.apply_aliases
@@ -270,6 +306,18 @@ def _safe_dom_id(prefix: str, *parts: object) -> str:
     return f"{clean_prefix}_{digest}"
 
 
+def _section(title: str, subtitle: str = "") -> None:
+    st.markdown(
+        f"""
+<div class="od-section">
+  <div class="od-section-title">{html.escape(str(title or ""))}</div>
+  <div class="od-section-sub">{html.escape(str(subtitle or ""))}</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+
 def _merged_session_rows() -> list[dict]:
     loc = list_sessions()
     eng = _db_engine()
@@ -430,12 +478,12 @@ def _secrets_safe_get(key: str, default: str = "") -> str:
 
 
 def _brand_primary_hex() -> str:
-    h = _secrets_safe_get("BRAND_PRIMARY") or str(os.getenv("BRAND_PRIMARY") or "").strip() or "#22d3ee"
+    h = _secrets_safe_get("BRAND_PRIMARY") or str(os.getenv("BRAND_PRIMARY") or "").strip() or "#16803c"
     h = h.strip()
     if not h.startswith("#"):
         h = "#" + h
     if len(h) not in (4, 7):
-        return "#22d3ee"
+        return "#16803c"
     return h
 
 
@@ -444,11 +492,11 @@ def _hex_to_rgb_tuple(h: str) -> tuple[int, int, int]:
     if len(hx) == 3:
         hx = "".join(c * 2 for c in hx)
     if len(hx) != 6:
-        return (34, 211, 238)
+        return (22, 128, 60)
     try:
         return int(hx[0:2], 16), int(hx[2:4], 16), int(hx[4:6], 16)
     except ValueError:
-        return (34, 211, 238)
+        return (22, 128, 60)
 
 
 def _hex_darken(h: str, factor: float = 0.52) -> str:
@@ -526,111 +574,163 @@ _OD_COMMERCIAL_CSS = """
   :root {
 ___BRAND_VARS___
     --od-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    --od-line: rgba(148, 163, 184, 0.18);
+    --od-bg: #f4f6f5;
+    --od-surface: #ffffff;
+    --od-surface-2: #f9faf9;
+    --od-ink: #111312;
+    --od-ink-soft: #4b5563;
+    --od-muted-ink: #6b7280;
+    --od-line: #d9dedb;
+    --od-line-strong: #b8c0bc;
+    --od-success: #16803c;
+    --od-danger: #c2412d;
+    --od-warning: #b7791f;
+    --od-charcoal: #171a18;
   }
 
   html, body, [class*="css"] { font-family: var(--od-font) !important; }
 
   .stApp {
-    background: radial-gradient(1200px 600px at 10% -10%, var(--od-radial-hero), transparent 55%),
-                radial-gradient(900px 500px at 100% 0%, rgba(99, 102, 241, 0.10), transparent 50%),
-                linear-gradient(180deg, #070b12 0%, #0a0f1a 100%) !important;
+    background: var(--od-bg) !important;
+    color: var(--od-ink) !important;
   }
 
   .od-brand-logo {
-    max-height: 42px;
+    max-height: 34px;
     width: auto;
     display: block;
-    margin-bottom: 0.55rem;
+    margin-bottom: 0.5rem;
     object-fit: contain;
-    border-radius: 10px;
+    border-radius: 8px;
   }
-  .od-brand-logo.od-hero-logo { max-height: 52px; margin-bottom: 0.65rem; }
+  .od-brand-logo.od-hero-logo { max-height: 38px; margin-bottom: 0.5rem; }
 
   .block-container {
-    padding-top: 1.25rem;
+    padding-top: 1rem;
     padding-bottom: 3rem;
-    max-width: 1200px;
+    max-width: 1280px;
   }
 
-  h1, h2, h3 { letter-spacing: -0.03em; font-weight: 700 !important; color: #f8fafc !important; }
-  .stCaption, [data-testid="stCaptionContainer"] { color: #94a3b8 !important; }
+  h1, h2, h3 { letter-spacing: -0.02em; font-weight: 780 !important; color: var(--od-ink) !important; }
+  .stCaption, [data-testid="stCaptionContainer"] { color: var(--od-muted-ink) !important; }
+  .stMarkdown, .stText, p, label, [data-testid="stMarkdownContainer"] { color: var(--od-ink) !important; }
 
-  .od-muted { color: #94a3b8 !important; font-size: 0.95rem; line-height: 1.5; }
-  .od-small { color: #64748b !important; font-size: 0.875rem; line-height: 1.45; }
+  .od-muted { color: var(--od-ink-soft) !important; font-size: 0.95rem; line-height: 1.5; }
+  .od-small { color: var(--od-muted-ink) !important; font-size: 0.875rem; line-height: 1.45; }
 
-  .od-hero {
+  .od-workbench {
     position: relative;
-    overflow: hidden;
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.75) 100%);
+    background: var(--od-surface);
     border: 1px solid var(--od-line);
-    border-radius: 20px;
-    padding: 1.35rem 1.5rem 1.25rem;
-    margin-bottom: 0.5rem;
-    box-shadow: 0 24px 48px -24px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255,255,255,0.03) inset;
+    border-left: 5px solid var(--od-accent);
+    border-radius: 8px;
+    padding: 1rem 1.1rem;
+    margin-bottom: 0.75rem;
+    box-shadow: 0 8px 18px rgba(17, 19, 18, 0.06);
   }
-  .od-hero::before {
-    content: "";
-    position: absolute;
-    top: 0; left: 0; right: 0; height: 3px;
-    background: linear-gradient(90deg, var(--od-accent), #818cf8, #34d399);
-    opacity: 0.95;
+  .od-workbench-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
   }
+  .od-hero { background: var(--od-surface); border: 1px solid var(--od-line); border-radius: 8px; padding: 1rem; }
   .od-hero-kicker {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
     font-size: 0.72rem;
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--od-accent) !important;
-    margin-bottom: 0.5rem;
+    color: var(--od-success) !important;
+    margin-bottom: 0.35rem;
   }
   .od-badge {
     display: inline-block;
     padding: 0.15rem 0.5rem;
-    border-radius: 999px;
+    border-radius: 6px;
     font-size: 0.65rem;
     font-weight: 800;
     letter-spacing: 0.06em;
-    background: var(--od-accent-dim);
-    color: #ecfeff !important;
-    border: 1px solid var(--od-accent-border);
+    background: #e8f7ee;
+    color: var(--od-success) !important;
+    border: 1px solid #bce3c8;
   }
   .od-hero-title {
     font-weight: 800;
-    font-size: clamp(1.35rem, 2.5vw, 1.65rem);
-    letter-spacing: -0.04em;
-    color: #f8fafc !important;
+    font-size: 1.55rem;
+    letter-spacing: -0.03em;
+    color: var(--od-ink) !important;
     line-height: 1.2;
   }
-  .od-hero-sub { margin-top: 0.55rem; max-width: 42rem; }
+  .od-hero-sub { margin-top: 0.4rem; max-width: 48rem; }
 
   .od-pill-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
   .od-pill {
     font-size: 0.78rem;
-    font-weight: 600;
-    color: #cbd5e1 !important;
+    font-weight: 700;
+    color: var(--od-ink-soft) !important;
     padding: 0.35rem 0.65rem;
-    border-radius: 999px;
+    border-radius: 8px;
     border: 1px solid var(--od-line);
-    background: rgba(15, 23, 42, 0.5);
+    background: var(--od-surface-2);
+  }
+  .od-stage-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(120px, 1fr));
+    gap: 0.55rem;
+    margin-top: 0.9rem;
+  }
+  .od-stage {
+    border: 1px solid var(--od-line);
+    background: var(--od-surface-2);
+    border-radius: 8px;
+    padding: 0.65rem 0.7rem;
+  }
+  .od-stage-num { font-size: 0.72rem; font-weight: 850; color: var(--od-success) !important; letter-spacing: 0.08em; }
+  .od-stage-title { font-size: 0.88rem; font-weight: 760; color: var(--od-ink) !important; margin-top: 0.15rem; }
+  .od-stage-sub { font-size: 0.76rem; color: var(--od-muted-ink) !important; margin-top: 0.1rem; }
+
+  .od-page-title {
+    font-size: 0.9rem;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--od-muted-ink) !important;
+    margin-bottom: 0.15rem;
+  }
+  .od-page-focus { font-size: 1.1rem; font-weight: 780; color: var(--od-ink) !important; }
+  .od-action-strip {
+    display: flex;
+    gap: 0.45rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .od-status {
+    padding: 0.4rem 0.55rem;
+    border: 1px solid var(--od-line);
+    border-radius: 8px;
+    background: var(--od-surface-2);
+    color: var(--od-ink-soft) !important;
+    font-size: 0.78rem;
+    font-weight: 700;
   }
 
   .od-card {
-    background: linear-gradient(165deg, rgba(30, 41, 59, 0.55) 0%, rgba(15, 23, 42, 0.4) 100%);
+    background: var(--od-surface);
     border: 1px solid var(--od-line);
-    border-radius: 18px;
+    border-radius: 8px;
     padding: 1rem 1.1rem 0.95rem;
-    box-shadow: 0 16px 40px -28px rgba(0,0,0,0.5);
+    box-shadow: 0 8px 18px rgba(17, 19, 18, 0.05);
   }
   .od-card-h {
     font-size: 0.72rem;
     font-weight: 800;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #94a3b8 !important;
+    color: var(--od-muted-ink) !important;
     margin-bottom: 0.35rem;
   }
   .od-card + .od-card { margin-top: 10px; }
@@ -638,10 +738,12 @@ ___BRAND_VARS___
   hr { border: none; border-top: 1px solid var(--od-line); opacity: 1; }
 
   div.stButton > button, div.stDownloadButton > button, a[data-testid="stLinkButton"] {
-    border-radius: 12px !important;
+    border-radius: 8px !important;
     padding: 0.55rem 1rem !important;
-    font-weight: 600 !important;
-    border: 1px solid var(--od-line) !important;
+    font-weight: 760 !important;
+    border: 1px solid var(--od-line-strong) !important;
+    background: #ffffff !important;
+    color: var(--od-ink) !important;
     transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease !important;
   }
   div.stButton > button:hover, div.stDownloadButton > button:hover, a[data-testid="stLinkButton"]:hover {
@@ -650,76 +752,139 @@ ___BRAND_VARS___
   }
   div.stButton > button[data-testid="baseButton-primary"],
   button[kind="primary"] {
-    background: linear-gradient(135deg, var(--od-accent-deep) 0%, var(--od-accent) 100%) !important;
-    color: #042f2e !important;
-    border: none !important;
-    font-weight: 700 !important;
-    box-shadow: 0 8px 24px -8px var(--od-glow) !important;
+    background: var(--od-charcoal) !important;
+    color: #ffffff !important;
+    border: 1px solid var(--od-charcoal) !important;
+    font-weight: 800 !important;
+    box-shadow: none !important;
   }
   div.stButton > button[data-testid="baseButton-primary"]:hover {
-    filter: brightness(1.06);
-    box-shadow: 0 12px 28px -8px var(--od-glow) !important;
+    background: #000000 !important;
+    box-shadow: 0 0 0 3px rgba(22, 128, 60, 0.14) !important;
   }
 
   [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
-    border-radius: 14px !important;
+    border-radius: 8px !important;
     overflow: hidden !important;
     border: 1px solid var(--od-line) !important;
-    box-shadow: 0 4px 24px -12px rgba(0,0,0,0.35);
+    box-shadow: none;
+    background: #ffffff !important;
   }
 
   [data-testid="stTabs"] { margin-top: 8px; }
   [data-testid="stTabs"] [role="tablist"] {
     gap: 0.35rem;
-    background: rgba(15, 23, 42, 0.55);
+    background: var(--od-surface);
     padding: 0.35rem;
-    border-radius: 14px;
+    border-radius: 8px;
     border: 1px solid var(--od-line);
   }
   [data-testid="stTabs"] button[role="tab"] {
-    border-radius: 10px !important;
-    font-weight: 600 !important;
+    border-radius: 6px !important;
+    font-weight: 760 !important;
     padding: 0.45rem 0.85rem !important;
+    color: var(--od-ink-soft) !important;
   }
   [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-    background: var(--od-tab-active) !important;
-    color: #ecfeff !important;
+    background: #171a18 !important;
+    color: #ffffff !important;
   }
 
   section[data-testid="stSidebar"] > div { padding-top: 1rem; }
   section[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #0c1220 0%, #0a0e17 100%) !important;
-    border-right: 1px solid var(--od-line) !important;
+    background: #171a18 !important;
+    border-right: 1px solid #080908 !important;
   }
-  [data-testid="stSidebar"] .stRadio > label { font-weight: 700 !important; font-size: 0.8rem !important; color: #64748b !important; letter-spacing: 0.04em; text-transform: uppercase; }
-  [data-testid="stSidebar"] .stRadio label p { font-weight: 600 !important; font-size: 0.95rem !important; color: #e2e8f0 !important; }
+  [data-testid="stSidebar"] .stRadio > label { font-weight: 800 !important; font-size: 0.78rem !important; color: #a8b0aa !important; letter-spacing: 0.08em; text-transform: uppercase; }
+  [data-testid="stSidebar"] .stRadio label p { font-weight: 760 !important; font-size: 0.95rem !important; color: #f4f6f5 !important; }
+  [data-testid="stSidebar"] [data-testid="stCaptionContainer"] { color: #a8b0aa !important; }
 
   .od-nav {
-    background: linear-gradient(165deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.35) 100%);
-    border: 1px solid var(--od-line);
-    border-radius: 16px;
+    background: #202420;
+    border: 1px solid #333933;
+    border-radius: 8px;
     padding: 1rem 1rem 0.85rem;
     margin-bottom: 12px;
-    box-shadow: 0 12px 32px -20px rgba(0,0,0,0.45);
   }
-  .od-nav-title { font-weight: 800; letter-spacing: -0.03em; font-size: 1.08rem; color: #f8fafc !important; }
+  .od-nav-title { font-weight: 850; letter-spacing: -0.02em; font-size: 1.08rem; color: #ffffff !important; }
   .od-nav-sub { margin-top: 0.25rem; font-size: 0.8rem !important; }
   .od-nav ul { list-style: none; padding-left: 0; margin: 10px 0 0 0; }
-  .od-nav li { padding: 6px 8px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); margin-bottom: 8px; }
+  .od-nav li { padding: 6px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); margin-bottom: 8px; }
   .od-nav li:last-child { margin-bottom: 0; }
   .od-nav li b { font-weight: 750; }
 
   [data-testid="stExpander"] details {
     border: 1px solid var(--od-line) !important;
-    border-radius: 14px !important;
-    background: rgba(15, 23, 42, 0.35) !important;
+    border-radius: 8px !important;
+    background: var(--od-surface) !important;
   }
 
   div[data-testid="stMetric"] {
-    background: rgba(15, 23, 42, 0.45);
+    background: var(--od-surface);
     border: 1px solid var(--od-line);
-    border-radius: 14px;
+    border-radius: 8px;
     padding: 0.65rem 0.75rem;
+  }
+  div[data-testid="stMetric"] label { color: var(--od-muted-ink) !important; font-weight: 760 !important; }
+  div[data-testid="stMetric"] [data-testid="stMetricValue"] { color: var(--od-ink) !important; font-weight: 850 !important; }
+
+  [data-testid="stAlert"] {
+    border-radius: 8px !important;
+    border: 1px solid var(--od-line) !important;
+  }
+  [data-testid="stFileUploader"] {
+    background: var(--od-surface);
+    border: 1px dashed var(--od-line-strong);
+    border-radius: 8px;
+    padding: 0.7rem;
+  }
+  [data-testid="stFileUploader"] section {
+    border: none !important;
+    padding: 0 !important;
+  }
+  .od-section {
+    border: 1px solid var(--od-line);
+    background: var(--od-surface);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    margin: 0.35rem 0 0.85rem;
+  }
+  .od-section-title {
+    font-size: 1.05rem;
+    font-weight: 840;
+    color: var(--od-ink) !important;
+  }
+  .od-section-sub {
+    margin-top: 0.15rem;
+    font-size: 0.88rem;
+    color: var(--od-muted-ink) !important;
+  }
+  .od-kpi-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0.5rem 0 0.8rem;
+  }
+  .od-kpi {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.55rem;
+    border-radius: 8px;
+    background: #ffffff;
+    border: 1px solid var(--od-line);
+    color: var(--od-ink-soft) !important;
+    font-size: 0.8rem;
+    font-weight: 760;
+  }
+  input, textarea, [data-baseweb="select"] > div {
+    border-radius: 8px !important;
+  }
+
+  @media (max-width: 760px) {
+    .od-stage-row { grid-template-columns: 1fr 1fr; }
+    .od-workbench-top { display: block; }
+    .od-action-strip { margin-top: 0.75rem; }
   }
 </style>
 """
@@ -728,38 +893,34 @@ st.markdown(_OD_COMMERCIAL_CSS.replace("___BRAND_VARS___", _brand_vars), unsafe_
 
 require_login()
 
-col_a, col_b = st.columns([3, 2], vertical_alignment="bottom")
 _brand_name_h = html.escape(_brand_display_name())
 _brand_logo_h = _brand_logo_img_html("od-hero-logo")
-with col_a:
-    st.markdown(
-        f"""
-<div class="od-hero">
-  {_brand_logo_h}
-  <div class="od-hero-kicker">Vendas em direto <span class="od-badge">Pro</span></div>
-  <div class="od-hero-title">{_brand_name_h}</div>
-  <div class="od-hero-sub od-muted">Do export do Tampermonkey ao cliente final: preços, resumos, mensagens e etiquetas — num fluxo único, com histórico e sessões guardadas.</div>
-  <div class="od-pill-row">
-    <span class="od-pill">Importar Comments</span>
-    <span class="od-pill">Preços &amp; totais</span>
-    <span class="od-pill">Mensagens + Facebook</span>
-    <span class="od-pill">Etiquetas 10×15</span>
+st.markdown(
+    f"""
+<div class="od-workbench">
+  <div class="od-workbench-top">
+    <div>
+      {_brand_logo_h}
+      <div class="od-hero-kicker">Painel comercial <span class="od-badge">Diretos Pro</span></div>
+      <div class="od-hero-title">{_brand_name_h}</div>
+      <div class="od-hero-sub od-muted">Importa, valida preços, fecha mensagens e prepara etiquetas sem sair do fluxo de venda.</div>
+    </div>
+    <div class="od-action-strip">
+      <span class="od-status">CSV / Excel</span>
+      <span class="od-status">Facebook Business</span>
+      <span class="od-status">Sessões guardadas</span>
+    </div>
+  </div>
+  <div class="od-stage-row">
+    <div class="od-stage"><div class="od-stage-num">01</div><div class="od-stage-title">Encomendas</div><div class="od-stage-sub">importar e limpar</div></div>
+    <div class="od-stage"><div class="od-stage-num">02</div><div class="od-stage-title">Preços</div><div class="od-stage-sub">guardar antes de vender</div></div>
+    <div class="od-stage"><div class="od-stage-num">03</div><div class="od-stage-title">Mensagens</div><div class="od-stage-sub">copiar e abrir chat</div></div>
+    <div class="od-stage"><div class="od-stage-num">04</div><div class="od-stage-title">Etiquetas</div><div class="od-stage-sub">impressão 10x15</div></div>
   </div>
 </div>
 """,
-        unsafe_allow_html=True,
-    )
-with col_b:
-    st.markdown(
-        """
-<div class="od-card">
-  <div class="od-card-h">Fluxo recomendado</div>
-  <div class="od-muted">1) Encomendas &nbsp;→&nbsp; 2) <b>Guardar preços</b> &nbsp;→&nbsp; 3) Resumo / Mensagens</div>
-  <div class="od-small" style="margin-top:10px">No fim, <b>Guardar sessão</b> para recuperar preços e rascunho noutro dia ou noutro PC (com base de dados).</div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
+    unsafe_allow_html=True,
+)
 
 STATE_PATH = os.path.join(os.getcwd(), "saved", "organizer_state.json")
 
@@ -808,12 +969,12 @@ with st.sidebar:
         key="nav_page",
         on_change=_on_nav_change,
         format_func=lambda k: {
-            "Operação": "Operação",
-            "Preços": "Preços",
-            "Mensagens": "Mensagens",
-            "Etiquetas": "Etiquetas",
-            "Histórico": "Histórico",
-            "Definições": "Definições",
+            "Operação": "01  Operação",
+            "Preços": "02  Preços",
+            "Mensagens": "03  Mensagens",
+            "Etiquetas": "04  Etiquetas",
+            "Histórico": "05  Histórico",
+            "Definições": "06  Definições",
         }.get(k, k),
     )
 
@@ -836,6 +997,7 @@ with st.sidebar:
             st.rerun()
 
 st.divider()
+_section(nav, nav_desc.get(nav, ""))
 
 # Unsaved changes modal (navigation guard)
 if bool(st.session_state.get("show_unsaved_nav_dialog")):
@@ -893,8 +1055,7 @@ prices_df = None
 orders_source_label = None
 
 if nav == "Definições":
-    st.subheader("Definições")
-    st.caption("Estas definições aplicam-se ao direto atual e à geração de mensagens/etiquetas.")
+    _section("Preferências do direto", "Define moeda, quantidade por defeito e texto usado nas mensagens.")
     c1, c2 = st.columns([1, 1])
     with c1:
         st.session_state["currency"] = st.selectbox("Moeda", options=["EUR", "BRL", "USD"], index=["EUR", "BRL", "USD"].index(currency))
@@ -909,16 +1070,13 @@ if nav == "Definições":
         )
 
     st.divider()
-    st.subheader("Mensagens")
+    _section("Template de mensagem", "Texto usado no resumo individual e no bloco final.")
     st.session_state["intro"] = st.text_input("Introdução", value=intro)
     st.session_state["total_line_template"] = st.text_area("Linha com total (use {total})", value=total_line_template, height=70)
     st.session_state["outro"] = st.text_input("Fecho", value=outro)
 
 elif nav == "Histórico":
-    st.subheader("Histórico de sessões")
-    st.caption(
-        "Lista **ficheiros locais** (`saved/sessions/`) e **sessões com JSON na base de dados** (quando `DATABASE_URL` está configurado)."
-    )
+    _section("Sessões guardadas", "Abre ou elimina sessões locais e sessões guardadas na base de dados.")
     sessions = _merged_session_rows()
     if not sessions:
         st.info("Ainda não há sessões guardadas.")
@@ -1016,19 +1174,14 @@ else:
                 if name.endswith(".csv"):
                     # Tampermonkey export uses ';' delimiter and often includes UTF-8 BOM.
                     raw = uploaded.getvalue()
-                    sample = raw[:4096].decode("utf-8-sig", errors="ignore")
-                    first_line = (sample.splitlines() or [""])[0]
-                    semicolons = first_line.count(";")
-                    commas = first_line.count(",")
-                    sep = ";" if semicolons > commas else ","
-                    orders_df = _read_csv_bytes_best_effort(raw, sep=sep, force_text=True)
+                    sep = _csv_separator_from_bytes(raw)
+                    orders_df = _cached_read_orders_csv(raw, sep)
                     orders_source_label = f"CSV: {uploaded.name}"
                 else:
                     raw = uploaded.getvalue()
-                    excel = pd.ExcelFile(io.BytesIO(raw))
-                    sheet_names = excel.sheet_names
-                    default_orders = _detect_sheet(excel, "orders")
-                    default_prices = _detect_sheet(excel, "prices")
+                    sheet_names = _cached_excel_sheet_names(raw)
+                    default_orders = _detect_sheet_from_names(sheet_names, "orders")
+                    default_prices = _detect_sheet_from_names(sheet_names, "prices")
                     orders_sheet = st.selectbox(
                         "Aba de comentários / encomendas",
                         options=sheet_names,
@@ -1041,11 +1194,11 @@ else:
                         help="Se escolher uma aba aqui, os preços do Excel ficam disponíveis para importar automaticamente.",
                     )
                     # Read as text to avoid scientific notation for IDs (Excel/Windows)
-                    orders_df = pd.read_excel(excel, sheet_name=orders_sheet, dtype=str)
+                    orders_df = _cached_read_excel_sheet(raw, orders_sheet, force_text=True)
                     orders_source_label = f"Excel: {uploaded.name} / aba: {orders_sheet}"
                     if prices_sheet and prices_sheet != "(nenhuma)":
                         try:
-                            prices_df = pd.read_excel(excel, sheet_name=prices_sheet)
+                            prices_df = _cached_read_excel_sheet(raw, prices_sheet, force_text=False)
                         except Exception as e:
                             logger.warning("Falha ao ler aba de preços do Excel enviado.", exc_info=True)
                             prices_df = pd.DataFrame(columns=["Produto", "Preco"])
@@ -1062,19 +1215,14 @@ else:
                 name = str(cached.get("name") or "").lower()
                 raw = cached.get("bytes") or b""
                 if name.endswith(".csv"):
-                    sample = raw[:4096].decode("utf-8-sig", errors="ignore")
-                    first_line = (sample.splitlines() or [""])[0]
-                    semicolons = first_line.count(";")
-                    commas = first_line.count(",")
-                    sep = ";" if semicolons > commas else ","
-                    orders_df = _read_csv_bytes_best_effort(raw, sep=sep, force_text=True)
+                    sep = _csv_separator_from_bytes(raw)
+                    orders_df = _cached_read_orders_csv(raw, sep)
                     orders_source_label = f"CSV: {cached.get('name')}"
                     prices_df = pd.DataFrame(columns=["Produto", "Preco"])
                 elif name.endswith(".xlsx"):
-                    excel = pd.ExcelFile(io.BytesIO(raw))
-                    sheet_names = excel.sheet_names
-                    default_orders = _detect_sheet(excel, "orders")
-                    default_prices = _detect_sheet(excel, "prices")
+                    sheet_names = _cached_excel_sheet_names(raw)
+                    default_orders = _detect_sheet_from_names(sheet_names, "orders")
+                    default_prices = _detect_sheet_from_names(sheet_names, "prices")
                     orders_sheet = st.selectbox(
                         "Aba de comentários / encomendas",
                         options=sheet_names,
@@ -1088,11 +1236,11 @@ else:
                         help="Se escolher uma aba aqui, os preços do Excel ficam disponíveis para importar automaticamente.",
                         key="prices_sheet_pick_cached",
                     )
-                    orders_df = pd.read_excel(excel, sheet_name=orders_sheet, dtype=str)
+                    orders_df = _cached_read_excel_sheet(raw, orders_sheet, force_text=True)
                     orders_source_label = f"Excel: {cached.get('name')} / aba: {orders_sheet}"
                     if prices_sheet and prices_sheet != "(nenhuma)":
                         try:
-                            prices_df = pd.read_excel(excel, sheet_name=prices_sheet)
+                            prices_df = _cached_read_excel_sheet(raw, prices_sheet, force_text=False)
                         except Exception as e:
                             logger.warning("Falha ao ler aba de preços do Excel em cache.", exc_info=True)
                             prices_df = pd.DataFrame(columns=["Produto", "Preco"])
@@ -1121,8 +1269,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
         if tab_comments is not None:
             with tab_comments:
-                st.subheader("Comentários (texto original)")
-                st.caption("Comentários ligados ao rascunho (editar/remover reflete em todo o lado).")
+                _section("Comentários importados", "Revê a mensagem original por cliente e limpa comentários em lote antes de fechar contas.")
 
             # Use the shared draft if available (keeps tabs in sync)
             if "orders_draft" in st.session_state and isinstance(st.session_state["orders_draft"], pd.DataFrame):
@@ -1246,8 +1393,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
         if tab_upload is not None:
             with tab_upload:
-                st.subheader("Encomendas")
-                st.caption("Edite as quantidades aqui. As outras abas refletem estas quantidades.")
+                _section("Mesa de encomendas", "Ajusta quantidades, exclui linhas e aplica alterações só quando estiver tudo validado.")
                 if orders_source_label:
                     st.markdown(f"<div class='od-muted'>Fonte: <b>{orders_source_label}</b></div>", unsafe_allow_html=True)
 
@@ -1317,8 +1463,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 if "Profile ID" in orders_edit.columns:
                     col_cfg["Profile ID"] = st.column_config.TextColumn("Profile ID", disabled=True)
 
-                st.markdown("<div class='od-card-h' style='margin-top:6px'>Edição (aplicar no fim)</div>", unsafe_allow_html=True)
-                st.caption("Edite à vontade. Clique **Aplicar alterações** para atualizar o resumo/mensagens/etiquetas de uma vez.")
+                st.markdown("<div class='od-card-h' style='margin-top:6px'>Rascunho operacional</div>", unsafe_allow_html=True)
+                st.caption("Edita livremente. O resumo, mensagens e etiquetas só mudam depois de aplicar.")
 
                 with st.form("orders_form", border=False):
                     edited_orders = st.data_editor(
@@ -1364,7 +1510,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     orders_for_calc = orders_for_calc.drop(columns=["Incluir"], errors="ignore")
 
                 st.divider()
-                st.subheader("Guardar sessão")
+                _section("Guardar sessão", "Grava o direto atual para recuperar encomendas, preços e IDs mais tarde.")
                 c1, c2 = st.columns([2, 1])
                 with c1:
                     session_label = st.text_input(
@@ -1495,11 +1641,10 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
         if tab_prices is not None:
             with tab_prices:
-                st.subheader("Preços")
-                st.caption("Edite tudo e clique em **Guardar preços** no final. Antes de guardar, as outras abas não mudam.")
+                _section("Tabela comercial de preços", "Importa, revê e guarda preços. As outras páginas só usam valores guardados.")
 
-            st.markdown("<div class='od-card-h'>Upload de preços</div>", unsafe_allow_html=True)
-            st.caption("Formato esperado: colunas tipo `Referencia` + `preços/precos` (CSV ou Excel). Pode conter referências a mais.")
+            st.markdown("<div class='od-card-h'>Importação rápida</div>", unsafe_allow_html=True)
+            st.caption("Formato esperado: colunas tipo `Referencia` + `preços/precos` em CSV ou Excel.")
 
             if bool(st.session_state.get("excel_prices_map")):
                 with st.container(border=False):
@@ -1548,22 +1693,16 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 name = (uploaded.name or "").lower()
                 raw = uploaded.getvalue()
                 if name.endswith(".csv"):
-                    sample = raw[:4096].decode("utf-8-sig", errors="ignore")
-                    first_line = (sample.splitlines() or [""])[0]
-                    semicolons = first_line.count(";")
-                    commas = first_line.count(",")
-                    sep = ";" if semicolons > commas else ","
-                    return _read_csv_bytes_best_effort(raw, sep=sep, force_text=True)
+                    return _cached_read_orders_csv(raw, _csv_separator_from_bytes(raw))
                 # xlsx
-                excel = pd.ExcelFile(io.BytesIO(raw))
-                sheet_names = excel.sheet_names
+                sheet_names = _cached_excel_sheet_names(raw)
                 sheet = st.selectbox(
                     "Aba de preços (Excel)",
                     options=sheet_names,
                     index=0,
                     key="prices_upload_sheet_pick",
                 )
-                return pd.read_excel(excel, sheet_name=sheet)
+                return _cached_read_excel_sheet(raw, sheet, force_text=False)
 
             def _infer_prices_columns(df: pd.DataFrame) -> tuple[str, str]:
                 cols = [str(c) for c in df.columns]
@@ -1732,6 +1871,22 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
         )
         merged = apply_price_overrides(parsed.merged, overrides_df)
 
+        priced_rows_global = int(merged["Preco"].notna().sum()) if "Preco" in merged.columns else 0
+        total_rows_global = int(merged.shape[0]) if merged is not None else 0
+        refs_global = int(merged["ProdutoKey"].nunique()) if "ProdutoKey" in merged.columns else 0
+        clients_global = int(parsed.orders["Cliente"].dropna().astype(str).str.strip().nunique()) if "Cliente" in parsed.orders.columns else 0
+        st.markdown(
+            f"""
+<div class="od-kpi-line">
+  <span class="od-kpi">Clientes: {clients_global}</span>
+  <span class="od-kpi">Linhas: {total_rows_global}</span>
+  <span class="od-kpi">Referências: {refs_global}</span>
+  <span class="od-kpi">Com preço: {priced_rows_global}/{total_rows_global}</span>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
         # ID estável reutilizado quando abres uma sessão guardada.
         if "history_session_id" not in st.session_state:
             loaded = st.session_state.get("loaded_session") or {}
@@ -1837,7 +1992,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
         if tab_summary is not None:
             with tab_summary:
-                st.subheader("Resumo")
+                _section("Fecho do direto", "Confirma totais por cliente antes de avançar para mensagens e etiquetas.")
                 priced_rows = int(merged["Preco"].notna().sum()) if "Preco" in merged.columns else 0
                 total_rows = int(merged.shape[0]) if merged is not None else 0
                 saved_prices = len(st.session_state.get("price_overrides") or {})
@@ -1863,7 +2018,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 summary_display["Total"] = summary_display["Total"].map(lambda v: format_currency(float(v), currency))
                 st.dataframe(summary_display, width="stretch")
 
-                st.subheader("Detalhe por cliente")
+                _section("Detalhe por cliente", "Abre cada cliente para copiar ações rápidas e conferir itens cobrados.")
                 tpl_ver = template_version(intro, total_line_template, outro)
                 for client in summary["Cliente"].astype(str).tolist():
                     with st.expander(f"{client}"):
@@ -1905,7 +2060,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         st.components.v1.html(
                             f"""
 <div>
-  <button id="copy_{btn_key_base}" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: inherit; cursor:pointer;">
+  <button id="copy_{btn_key_base}" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #b8c0bc; background:#ffffff; color:#111312; cursor:pointer;">
     COPIAR MENSAGEM
   </button>
   <div id="copystatus_{btn_key_base}" style="margin-top:6px; font-size:0.9rem; opacity:0.85;"></div>
@@ -1970,7 +2125,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                             st.components.v1.html(
                                 f"""
 <div>
-  <button id="copyopen_{btn_key_base}" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: inherit; cursor:pointer;">
+  <button id="copyopen_{btn_key_base}" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #b8c0bc; background:#ffffff; color:#111312; cursor:pointer;">
     COPIAR + ABRIR CHAT
   </button>
   <div id="copyopenstatus_{btn_key_base}" style="margin-top:6px; font-size:0.9rem; opacity:0.85;"></div>
@@ -2036,7 +2191,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
         if tab_messages is not None:
             with tab_messages:
-                st.subheader("Mensagens")
+                _section("Mensagens para clientes", "Escolhe um cliente, copia o texto e abre chat/perfil quando houver ID disponível.")
                 by_client2, details2 = build_summary(merged.dropna(subset=["Preco"]))
                 if not details2:
                     priced_rows = int(merged["Preco"].notna().sum()) if "Preco" in merged.columns else 0
@@ -2101,7 +2256,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 st.components.v1.html(
                     f"""
 <div>
-  <button id="copy_msgtab_{msg_btn_key_base}" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: inherit; cursor:pointer;">
+  <button id="copy_msgtab_{msg_btn_key_base}" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #b8c0bc; background:#ffffff; color:#111312; cursor:pointer;">
     COPIAR MENSAGEM
   </button>
   <div id="copystatus_msgtab_{msg_btn_key_base}" style="margin-top:6px; font-size:0.9rem; opacity:0.85;"></div>
@@ -2166,7 +2321,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     st.components.v1.html(
                         f"""
 <div>
-  <button id="copyopen_msgtab_{msg_btn_key_base}" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: inherit; cursor:pointer;">
+  <button id="copyopen_msgtab_{msg_btn_key_base}" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #b8c0bc; background:#ffffff; color:#111312; cursor:pointer;">
     COPIAR + ABRIR CHAT
   </button>
   <div id="copyopenstatus_msgtab_{msg_btn_key_base}" style="margin-top:6px; font-size:0.9rem; opacity:0.85;"></div>
@@ -2239,7 +2394,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     st.rerun()
 
             st.divider()
-            st.subheader("Texto final (todos os clientes)")
+            _section("Texto final", "Bloco único com todas as mensagens prontas para arquivo ou envio manual.")
             text_blocks: list[str] = []
             for client, d in details2.items():
                 text_blocks.append(
@@ -2264,8 +2419,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
         if tab_labels is not None:
             with tab_labels:
-                st.subheader("Etiquetas 10×15 (imprimir)")
-                st.caption("Formato: Nome · Referência — Quantidade · Preço da referência")
+                _section("Etiquetas 10x15", "Seleciona as etiquetas, ordena por hora do vídeo e descarrega o HTML para impressão.")
 
                 base = merged.dropna(subset=["Preco"]).copy()
                 if base.empty:
