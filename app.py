@@ -2212,7 +2212,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 )
                 # Ordenação: sempre por Hora quando existir (cronológica), senão por Nome/Referência
                 if has_hora:
-                    dt = pd.to_datetime(labels_df["Hora"], errors="coerce", dayfirst=True)
+                    # `Hora` aqui é tipicamente duração (mm:ss ou hh:mm:ss), não hora do dia.
+                    dt = pd.to_timedelta(labels_df["Hora"].astype(str).str.strip(), errors="coerce")
                     labels_df = (
                         labels_df.assign(_HoraSort=dt)
                         .sort_values(["_HoraSort", "Cliente", "Referência"])
