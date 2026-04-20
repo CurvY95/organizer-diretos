@@ -626,7 +626,8 @@ ___BRAND_VARS___
     --od-success: #16803c;
     --od-danger: #c2412d;
     --od-warning: #b7791f;
-    --od-charcoal: #171a18;
+    --od-sidebar: #0f6b34;
+    --od-sidebar-2: #0b5428;
   }
 
   html, body, [class*="css"] {
@@ -1008,22 +1009,22 @@ ___BRAND_VARS___
     color: var(--od-ink-soft) !important;
   }
   [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-    background: #171a18 !important;
+    background: var(--od-success) !important;
     color: #ffffff !important;
   }
 
   section[data-testid="stSidebar"] > div { padding-top: 1rem; }
   section[data-testid="stSidebar"] {
-    background: #171a18 !important;
-    border-right: 1px solid #080908 !important;
+    background: var(--od-sidebar) !important;
+    border-right: 1px solid var(--od-sidebar-2) !important;
   }
   [data-testid="stSidebar"] .stRadio > label { font-weight: 800 !important; font-size: 0.78rem !important; color: #a8b0aa !important; letter-spacing: 0.08em; text-transform: uppercase; }
   [data-testid="stSidebar"] .stRadio label p { font-weight: 760 !important; font-size: 0.95rem !important; color: #f4f6f5 !important; }
   [data-testid="stSidebar"] [data-testid="stCaptionContainer"] { color: #a8b0aa !important; }
 
   .od-nav {
-    background: #202420;
-    border: 1px solid #333933;
+    background: var(--od-sidebar-2);
+    border: 1px solid rgba(255,255,255,0.22);
     border-radius: 8px;
     padding: 1rem 1rem 0.85rem;
     margin-bottom: 12px;
