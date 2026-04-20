@@ -573,6 +573,7 @@ _OD_COMMERCIAL_CSS = """
 <style>
   :root {
 ___BRAND_VARS___
+    color-scheme: light;
     --od-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --od-bg: #f4f6f5;
     --od-surface: #ffffff;
@@ -588,7 +589,10 @@ ___BRAND_VARS___
     --od-charcoal: #171a18;
   }
 
-  html, body, [class*="css"] { font-family: var(--od-font) !important; }
+  html, body, [class*="css"] {
+    font-family: var(--od-font) !important;
+    color-scheme: light !important;
+  }
 
   .stApp {
     background: var(--od-bg) !important;
@@ -737,7 +741,10 @@ ___BRAND_VARS___
 
   hr { border: none; border-top: 1px solid var(--od-line); opacity: 1; }
 
-  div.stButton > button, div.stDownloadButton > button, a[data-testid="stLinkButton"] {
+  div.stButton > button,
+  div.stDownloadButton > button,
+  a[data-testid="stLinkButton"],
+  button[data-testid^="stBaseButton"] {
     border-radius: 8px !important;
     padding: 0.55rem 1rem !important;
     font-weight: 760 !important;
@@ -746,52 +753,77 @@ ___BRAND_VARS___
     color: var(--od-ink) !important;
     transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease !important;
   }
-  div.stButton > button *, div.stDownloadButton > button *, a[data-testid="stLinkButton"] * {
+  div.stButton > button *,
+  div.stDownloadButton > button *,
+  a[data-testid="stLinkButton"] *,
+  button[data-testid^="stBaseButton"] * {
     color: inherit !important;
   }
-  div.stButton > button:hover, div.stDownloadButton > button:hover, a[data-testid="stLinkButton"]:hover,
-  div.stButton > button:focus, div.stDownloadButton > button:focus, a[data-testid="stLinkButton"]:focus {
+  div.stButton > button:hover,
+  div.stDownloadButton > button:hover,
+  a[data-testid="stLinkButton"]:hover,
+  button[data-testid^="stBaseButton"]:hover,
+  div.stButton > button:focus,
+  div.stDownloadButton > button:focus,
+  a[data-testid="stLinkButton"]:focus,
+  button[data-testid^="stBaseButton"]:focus {
     background: #f7faf8 !important;
     color: var(--od-ink) !important;
     border-color: var(--od-hover-ring) !important;
     box-shadow: 0 0 0 3px rgba(22, 128, 60, 0.12) !important;
     outline: none !important;
   }
-  div.stButton > button:active, div.stDownloadButton > button:active, a[data-testid="stLinkButton"]:active {
+  div.stButton > button:active,
+  div.stDownloadButton > button:active,
+  a[data-testid="stLinkButton"]:active,
+  button[data-testid^="stBaseButton"]:active {
     background: #e8f7ee !important;
     color: var(--od-ink) !important;
     border-color: var(--od-success) !important;
     transform: translateY(1px);
   }
   div.stButton > button[data-testid="baseButton-primary"],
+  div.stButton > button[data-testid="stBaseButton-primary"],
+  button[data-testid="stBaseButton-primary"],
   button[kind="primary"] {
-    background: var(--od-charcoal) !important;
+    background: var(--od-success) !important;
     color: #ffffff !important;
-    border: 1px solid var(--od-charcoal) !important;
+    border: 1px solid var(--od-success) !important;
     font-weight: 800 !important;
     box-shadow: none !important;
   }
   div.stButton > button[data-testid="baseButton-primary"] *,
+  div.stButton > button[data-testid="stBaseButton-primary"] *,
+  button[data-testid="stBaseButton-primary"] *,
   button[kind="primary"] * {
     color: #ffffff !important;
   }
   div.stButton > button[data-testid="baseButton-primary"]:hover,
   div.stButton > button[data-testid="baseButton-primary"]:focus,
+  div.stButton > button[data-testid="stBaseButton-primary"]:hover,
+  div.stButton > button[data-testid="stBaseButton-primary"]:focus,
+  button[data-testid="stBaseButton-primary"]:hover,
+  button[data-testid="stBaseButton-primary"]:focus,
   button[kind="primary"]:hover,
   button[kind="primary"]:focus {
-    background: #000000 !important;
+    background: #11652f !important;
     color: #ffffff !important;
-    box-shadow: 0 0 0 3px rgba(22, 128, 60, 0.14) !important;
+    border-color: #11652f !important;
+    box-shadow: 0 0 0 3px rgba(22, 128, 60, 0.18) !important;
     outline: none !important;
   }
   div.stButton > button[data-testid="baseButton-primary"]:active,
+  div.stButton > button[data-testid="stBaseButton-primary"]:active,
+  button[data-testid="stBaseButton-primary"]:active,
   button[kind="primary"]:active {
-    background: var(--od-success) !important;
+    background: #0d4f25 !important;
     color: #ffffff !important;
-    border-color: var(--od-success) !important;
+    border-color: #0d4f25 !important;
   }
   div.stButton > button:disabled, div.stDownloadButton > button:disabled,
-  div.stButton > button[disabled], div.stDownloadButton > button[disabled] {
+  div.stButton > button[disabled], div.stDownloadButton > button[disabled],
+  button[data-testid^="stBaseButton"]:disabled,
+  button[data-testid^="stBaseButton"][disabled] {
     background: #eef1ef !important;
     color: #8a938e !important;
     border-color: #d9dedb !important;
@@ -799,7 +831,9 @@ ___BRAND_VARS___
     cursor: not-allowed !important;
   }
   div.stButton > button:disabled *, div.stDownloadButton > button:disabled *,
-  div.stButton > button[disabled] *, div.stDownloadButton > button[disabled] * {
+  div.stButton > button[disabled] *, div.stDownloadButton > button[disabled] *,
+  button[data-testid^="stBaseButton"]:disabled *,
+  button[data-testid^="stBaseButton"][disabled] * {
     color: #8a938e !important;
   }
 
