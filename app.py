@@ -632,13 +632,39 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
+    NAV_ITEMS = [
+        ("Operação", "Operação"),
+        ("Preços", "Preços"),
+        ("Mensagens", "Mensagens"),
+        ("Etiquetas", "Etiquetas"),
+        ("Histórico", "Histórico"),
+        ("Definições", "Definições"),
+    ]
     nav = st.radio(
         "Navegação",
-        options=["Trabalho atual", "Etiquetas 10×15", "Histórico", "Definições gerais"],
+        options=[k for k, _ in NAV_ITEMS],
         index=0,
         label_visibility="collapsed",
         key="nav_page",
+        format_func=lambda k: {
+            "Operação": "Operação",
+            "Preços": "Preços",
+            "Mensagens": "Mensagens",
+            "Etiquetas": "Etiquetas",
+            "Histórico": "Histórico",
+            "Definições": "Definições",
+        }.get(k, k),
     )
+
+    nav_desc = {
+        "Operação": "Importa Comments, ajusta encomendas e valida o resumo.",
+        "Preços": "Importa/edita preços e aplica ao pedido.",
+        "Mensagens": "Gera mensagens por cliente e ações (copiar/abrir chat).",
+        "Etiquetas": "Gera etiquetas 10×15 para impressão.",
+        "Histórico": "Sessões guardadas (local e/ou nuvem).",
+        "Definições": "Moeda e templates das mensagens.",
+    }
+    st.caption(nav_desc.get(nav, ""))
 
     st.divider()
     st.markdown("<div class='od-card-h' style='margin-bottom:0.35rem'>Conta</div>", unsafe_allow_html=True)
@@ -667,8 +693,8 @@ orders_df = None
 prices_df = None
 orders_source_label = None
 
-if nav == "Definições gerais":
-    st.subheader("Definições gerais")
+if nav == "Definições":
+    st.subheader("Definições")
     st.caption("Estas definições aplicam-se ao direto atual e à geração de mensagens/etiquetas.")
     c1, c2 = st.columns([1, 1])
     with c1:
@@ -815,15 +841,28 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro: {e}")
 
-if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and prices_df is not None:
+if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is not None and prices_df is not None:
     try:
-        tab_comments, tab_upload, tab_prices, tab_summary, tab_messages, tab_labels = st.tabs(
-            ["0) Comentários", "1) Encomendas (Comments)", "2) Preços", "3) Resumo", "4) Mensagens", "5) Etiquetas 10×15"]
-        )
+        tab_comments = None
+        tab_upload = None
+        tab_prices = None
+        tab_summary = None
+        tab_messages = None
+        tab_labels = None
 
-        with tab_comments:
-            st.subheader("Comentários (texto original)")
-            st.caption("Comentários ligados ao rascunho (editar/remover reflete em todo o lado).")
+        if nav == "Operação":
+            tab_comments, tab_upload, tab_summary = st.tabs(["Comentários", "Encomendas", "Resumo"])
+        elif nav == "Preços":
+            (tab_prices,) = st.tabs(["Preços"])
+        elif nav == "Mensagens":
+            (tab_messages,) = st.tabs(["Mensagens"])
+        elif nav == "Etiquetas":
+            (tab_labels,) = st.tabs(["Etiquetas 10×15"])
+
+        if tab_comments is not None:
+            with tab_comments:
+                st.subheader("Comentários (texto original)")
+                st.caption("Comentários ligados ao rascunho (editar/remover reflete em todo o lado).")
 
             # Use the shared draft if available (keeps tabs in sync)
             if "orders_draft" in st.session_state and isinstance(st.session_state["orders_draft"], pd.DataFrame):
@@ -945,164 +984,168 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
 
                 st.caption("Dica: marque vários clientes e aplique no fim. Assim não 'saltas' de refresh a cada remoção.")
 
-        with tab_upload:
-            st.subheader("Encomendas")
-            st.caption("Edite as quantidades aqui. As outras abas refletem estas quantidades.")
-            if orders_source_label:
-                st.markdown(f"<div class='od-muted'>Fonte: <b>{orders_source_label}</b></div>", unsafe_allow_html=True)
+        if tab_upload is not None:
+            with tab_upload:
+                st.subheader("Encomendas")
+                st.caption("Edite as quantidades aqui. As outras abas refletem estas quantidades.")
+                if orders_source_label:
+                    st.markdown(f"<div class='od-muted'>Fonte: <b>{orders_source_label}</b></div>", unsafe_allow_html=True)
 
-            # Build an editable view with standardized columns
-            orders_edit = _standardize_df_columns(orders_df)
-            orders_edit = _apply_aliases(orders_edit, ORDERS_ALIASES)
-            _validate_required_cols(orders_edit, REQUIRED_ORDERS_COLS, "Encomendas (Comments)")
+                # Build an editable view with standardized columns
+                orders_edit = _standardize_df_columns(orders_df)
+                orders_edit = _apply_aliases(orders_edit, ORDERS_ALIASES)
+                _validate_required_cols(orders_edit, REQUIRED_ORDERS_COLS, "Encomendas (Comments)")
 
-            ui_cols = ["Cliente"]
-            if "UserId" in orders_edit.columns:
-                ui_cols.append("UserId")
-            if "ProfileId" in orders_edit.columns:
-                ui_cols.append("ProfileId")
-            if "Hora" in orders_edit.columns:
-                ui_cols.append("Hora")
-            if "Comentario" in orders_edit.columns:
-                ui_cols.append("Comentario")
-            ui_cols += ["Produto", "Quantidade"]
+                ui_cols = ["Cliente"]
+                if "UserId" in orders_edit.columns:
+                    ui_cols.append("UserId")
+                if "ProfileId" in orders_edit.columns:
+                    ui_cols.append("ProfileId")
+                if "Hora" in orders_edit.columns:
+                    ui_cols.append("Hora")
+                if "Comentario" in orders_edit.columns:
+                    ui_cols.append("Comentario")
+                ui_cols += ["Produto", "Quantidade"]
 
-            orders_edit = orders_edit[ui_cols].copy()
-            orders_edit = orders_edit.rename(
-                columns={
-                    "Cliente": "Cliente",
-                    "UserId": "User ID",
-                    "ProfileId": "Profile ID",
-                    "Hora": "Hora",
-                    "Comentario": "Comentário",
-                    "Produto": "Referência",
-                    "Quantidade": "Quantidade",
-                }
-            )
-            # Soft-delete / exclude rows from totals
-            if "Incluir" not in orders_edit.columns:
-                orders_edit["Incluir"] = True
-
-            # Keep one shared draft across tabs/pages
-            if st.session_state.get("orders_draft_source") != (orders_source_label or "") or "orders_draft" not in st.session_state:
-                st.session_state["orders_draft_source"] = (orders_source_label or "")
-                st.session_state["orders_draft"] = orders_edit.copy()
-            orders_draft = st.session_state["orders_draft"].copy()
-
-            # Force numeric dtype so the editor allows changing values reliably
-            orders_draft["Quantidade"] = _coerce_number_series(orders_draft["Quantidade"])
-            if fill_missing_qty:
-                orders_draft["Quantidade"] = orders_draft["Quantidade"].fillna(1.0)
-
-            col_cfg = {
-                "Incluir": st.column_config.CheckboxColumn("Incluir", help="Se desativar, esta linha não entra nas contas."),
-                "Cliente": st.column_config.TextColumn("Cliente"),
-                "Hora": st.column_config.TextColumn("Hora", disabled=True),
-                "Referência": st.column_config.TextColumn("Referência", disabled=True),
-                "Quantidade": st.column_config.NumberColumn("Quantidade", min_value=0.0, step=0.5, format="%.3g"),
-            }
-            if "Comentário" in orders_draft.columns:
-                col_cfg["Comentário"] = st.column_config.TextColumn("Comentário", help="Editar/apagar aqui reflete em todo o lado.")
-            if "User ID" in orders_edit.columns:
-                col_cfg["User ID"] = st.column_config.TextColumn("User ID", disabled=True)
-
-            if "Profile ID" in orders_edit.columns:
-                col_cfg["Profile ID"] = st.column_config.TextColumn("Profile ID", disabled=True)
-
-            edited_orders = st.data_editor(
-                orders_draft,
-                width="stretch",
-                num_rows="fixed",
-                column_config={
-                    **col_cfg,
-                },
-                key="comments_editor",
-            )
-            st.session_state["orders_draft"] = edited_orders.copy()
-
-            # Convert back to expected input shape
-            orders_for_calc = edited_orders.rename(
-                columns={
-                    "Referência": "Produto",
-                    "User ID": "UserId",
-                    "Profile ID": "ProfileId",
-                    "Comentário": "Comentario",
-                }
-            ).copy()
-            if "Incluir" in orders_for_calc.columns:
-                orders_for_calc = orders_for_calc[orders_for_calc["Incluir"].fillna(True)].copy()
-                orders_for_calc = orders_for_calc.drop(columns=["Incluir"], errors="ignore")
-
-            st.divider()
-            st.subheader("Guardar sessão")
-            c1, c2 = st.columns([2, 1])
-            with c1:
-                session_label = st.text_input(
-                    "Nome da sessão",
-                    value=(st.session_state.get("session_label") or ""),
-                    placeholder="Ex.: Encomendas 14-04",
+                orders_edit = orders_edit[ui_cols].copy()
+                orders_edit = orders_edit.rename(
+                    columns={
+                        "Cliente": "Cliente",
+                        "UserId": "User ID",
+                        "ProfileId": "Profile ID",
+                        "Hora": "Hora",
+                        "Comentario": "Comentário",
+                        "Produto": "Referência",
+                        "Quantidade": "Quantidade",
+                    }
                 )
-                st.session_state["session_label"] = session_label
-            with c2:
-                if st.button("Guardar sessão", type="primary"):
-                    if "price_overrides" not in st.session_state:
-                        st.session_state["price_overrides"] = {}
-                    eng = _db_engine()
-                    local_st = load_local_state(STATE_PATH)
-                    local_dir = local_st.get("client_ids") or {}
-                    if not isinstance(local_dir, dict):
-                        local_dir = {}
-                    base_ids = _client_ids_from_orders_df(orders_for_calc)
-                    bulk: dict[str, dict[str, str]] = {}
-                    try:
-                        bulk = odb.get_customer_ids_bulk(eng, clientes=list(base_ids.keys()))
-                    except Exception:
-                        bulk = {}
-                    merged_ids = _merge_ids_fill_missing(base_ids, local_dir, bulk)
-                    sid, payload = save_session(
-                        label=session_label.strip(),
-                        orders_for_calc=orders_for_calc,
-                        price_overrides=st.session_state.get("price_overrides") or {},
-                        meta={"source": orders_source_label or ""},
+                # Soft-delete / exclude rows from totals
+                if "Incluir" not in orders_edit.columns:
+                    orders_edit["Incluir"] = True
+
+                # Keep one shared draft across tabs/pages
+                if (
+                    st.session_state.get("orders_draft_source") != (orders_source_label or "")
+                    or "orders_draft" not in st.session_state
+                ):
+                    st.session_state["orders_draft_source"] = (orders_source_label or "")
+                    st.session_state["orders_draft"] = orders_edit.copy()
+                orders_draft = st.session_state["orders_draft"].copy()
+
+                # Force numeric dtype so the editor allows changing values reliably
+                orders_draft["Quantidade"] = _coerce_number_series(orders_draft["Quantidade"])
+                if fill_missing_qty:
+                    orders_draft["Quantidade"] = orders_draft["Quantidade"].fillna(1.0)
+
+                col_cfg = {
+                    "Incluir": st.column_config.CheckboxColumn("Incluir", help="Se desativar, esta linha não entra nas contas."),
+                    "Cliente": st.column_config.TextColumn("Cliente"),
+                    "Hora": st.column_config.TextColumn("Hora", disabled=True),
+                    "Referência": st.column_config.TextColumn("Referência", disabled=True),
+                    "Quantidade": st.column_config.NumberColumn("Quantidade", min_value=0.0, step=0.5, format="%.3g"),
+                }
+                if "Comentário" in orders_draft.columns:
+                    col_cfg["Comentário"] = st.column_config.TextColumn("Comentário", help="Editar/apagar aqui reflete em todo o lado.")
+                if "User ID" in orders_edit.columns:
+                    col_cfg["User ID"] = st.column_config.TextColumn("User ID", disabled=True)
+
+                if "Profile ID" in orders_edit.columns:
+                    col_cfg["Profile ID"] = st.column_config.TextColumn("Profile ID", disabled=True)
+
+                edited_orders = st.data_editor(
+                    orders_draft,
+                    width="stretch",
+                    num_rows="fixed",
+                    column_config={
+                        **col_cfg,
+                    },
+                    key="comments_editor",
+                )
+                st.session_state["orders_draft"] = edited_orders.copy()
+
+                # Convert back to expected input shape
+                orders_for_calc = edited_orders.rename(
+                    columns={
+                        "Referência": "Produto",
+                        "User ID": "UserId",
+                        "Profile ID": "ProfileId",
+                        "Comentário": "Comentario",
+                    }
+                ).copy()
+                if "Incluir" in orders_for_calc.columns:
+                    orders_for_calc = orders_for_calc[orders_for_calc["Incluir"].fillna(True)].copy()
+                    orders_for_calc = orders_for_calc.drop(columns=["Incluir"], errors="ignore")
+
+                st.divider()
+                st.subheader("Guardar sessão")
+                c1, c2 = st.columns([2, 1])
+                with c1:
+                    session_label = st.text_input(
+                        "Nome da sessão",
+                        value=(st.session_state.get("session_label") or ""),
+                        placeholder="Ex.: Encomendas 14-04",
                     )
-                    try:
-                        odb.save_session_payload(eng, payload)
-                    except Exception as e:
-                        st.warning(f"Não gravei a sessão na base de dados: {e}")
-                    rows_up: list[tuple[str, str, str]] = []
-                    for nome, ids in merged_ids.items():
-                        u = (ids.get("user_id") or "").strip()
-                        p = (ids.get("profile_id") or "").strip()
-                        if u or p:
-                            rows_up.append((str(nome).strip(), u, p))
-                    if rows_up:
+                    st.session_state["session_label"] = session_label
+                with c2:
+                    if st.button("Guardar sessão", type="primary"):
+                        if "price_overrides" not in st.session_state:
+                            st.session_state["price_overrides"] = {}
+                        eng = _db_engine()
+                        local_st = load_local_state(STATE_PATH)
+                        local_dir = local_st.get("client_ids") or {}
+                        if not isinstance(local_dir, dict):
+                            local_dir = {}
+                        base_ids = _client_ids_from_orders_df(orders_for_calc)
+                        bulk: dict[str, dict[str, str]] = {}
                         try:
-                            odb.upsert_customer_ids_bulk(eng, rows=rows_up)
+                            bulk = odb.get_customer_ids_bulk(eng, clientes=list(base_ids.keys()))
+                        except Exception:
+                            bulk = {}
+                        merged_ids = _merge_ids_fill_missing(base_ids, local_dir, bulk)
+                        sid, payload = save_session(
+                            label=session_label.strip(),
+                            orders_for_calc=orders_for_calc,
+                            price_overrides=st.session_state.get("price_overrides") or {},
+                            meta={"source": orders_source_label or ""},
+                        )
+                        try:
+                            odb.save_session_payload(eng, payload)
                         except Exception as e:
-                            st.warning(f"Não atualizei os IDs na base de dados: {e}")
-                    try:
-                        local_st2 = load_local_state(STATE_PATH)
-                        local_st2.setdefault("client_ids", {})
+                            st.warning(f"Não gravei a sessão na base de dados: {e}")
+                        rows_up: list[tuple[str, str, str]] = []
                         for nome, ids in merged_ids.items():
-                            k = str(nome).strip()
-                            if not k:
-                                continue
                             u = (ids.get("user_id") or "").strip()
                             p = (ids.get("profile_id") or "").strip()
-                            if not u and not p:
-                                continue
-                            prev = local_st2["client_ids"].get(k) or {}
-                            out_u = str(prev.get("user_id") or "").strip()
-                            out_p = str(prev.get("profile_id") or "").strip()
-                            if u:
-                                out_u = u
-                            if p:
-                                out_p = p
-                            local_st2["client_ids"][k] = {"user_id": out_u, "profile_id": out_p}
-                        save_local_state(STATE_PATH, local_st2)
-                    except Exception:
-                        pass
-                    st.success(f"Sessão guardada: {sid} (ficheiro local + base de dados, se configurada).")
+                            if u or p:
+                                rows_up.append((str(nome).strip(), u, p))
+                        if rows_up:
+                            try:
+                                odb.upsert_customer_ids_bulk(eng, rows=rows_up)
+                            except Exception as e:
+                                st.warning(f"Não atualizei os IDs na base de dados: {e}")
+                        try:
+                            local_st2 = load_local_state(STATE_PATH)
+                            local_st2.setdefault("client_ids", {})
+                            for nome, ids in merged_ids.items():
+                                k = str(nome).strip()
+                                if not k:
+                                    continue
+                                u = (ids.get("user_id") or "").strip()
+                                p = (ids.get("profile_id") or "").strip()
+                                if not u and not p:
+                                    continue
+                                prev = local_st2["client_ids"].get(k) or {}
+                                out_u = str(prev.get("user_id") or "").strip()
+                                out_p = str(prev.get("profile_id") or "").strip()
+                                if u:
+                                    out_u = u
+                                if p:
+                                    out_p = p
+                                local_st2["client_ids"][k] = {"user_id": out_u, "profile_id": out_p}
+                            save_local_state(STATE_PATH, local_st2)
+                        except Exception:
+                            pass
+                        st.success(f"Sessão guardada: {sid} (ficheiro local + base de dados, se configurada).")
 
         parsed = parse_inputs(
             orders_for_calc,
@@ -1155,7 +1198,8 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
         except Exception:
             pass
 
-        with tab_prices:
+        if tab_prices is not None:
+            with tab_prices:
             st.subheader("Preços")
             st.caption("Edite tudo e clique em **Guardar preços** no final. Antes de guardar, as outras abas não mudam.")
 
@@ -1496,22 +1540,23 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
         except Exception:
             pass
 
-        with tab_summary:
-            st.subheader("Resumo")
-            priced_rows = int(merged["Preco"].notna().sum()) if "Preco" in merged.columns else 0
-            total_rows = int(merged.shape[0]) if merged is not None else 0
-            saved_prices = len(st.session_state.get("price_overrides") or {})
-            if priced_rows == 0:
-                st.warning(
-                    f"Sem linhas com preço aplicado ainda. "
-                    f"(Linhas: {total_rows} · Com preço: {priced_rows} · Preços guardados: {saved_prices})"
+        if tab_summary is not None:
+            with tab_summary:
+                st.subheader("Resumo")
+                priced_rows = int(merged["Preco"].notna().sum()) if "Preco" in merged.columns else 0
+                total_rows = int(merged.shape[0]) if merged is not None else 0
+                saved_prices = len(st.session_state.get("price_overrides") or {})
+                if priced_rows == 0:
+                    st.warning(
+                        f"Sem linhas com preço aplicado ainda. "
+                        f"(Linhas: {total_rows} · Com preço: {priced_rows} · Preços guardados: {saved_prices})"
+                    )
+                summary = merged.dropna(subset=["Preco"]).groupby("Cliente", as_index=False).agg(
+                    Total=("TotalItem", "sum"),
+                    QuantidadeTotal=("Quantidade", "sum"),
+                    ItensDiferentes=("ProdutoKey", "nunique"),
                 )
-            summary = merged.dropna(subset=["Preco"]).groupby("Cliente", as_index=False).agg(
-                Total=("TotalItem", "sum"),
-                QuantidadeTotal=("Quantidade", "sum"),
-                ItensDiferentes=("ProdutoKey", "nunique"),
-            )
-            summary = summary.sort_values(["Cliente"])
+                summary = summary.sort_values(["Cliente"])
 
             total_geral = float(summary["Total"].sum()) if not summary.empty else 0.0
             c1, c2, c3 = st.columns(3)
@@ -1693,7 +1738,8 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                     d2["TotalItem"] = d2["TotalItem"].map(lambda v: format_currency(float(v), currency))
                     st.dataframe(d2, width="stretch")
 
-        with tab_messages:
+        if tab_messages is not None:
+            with tab_messages:
             st.subheader("Mensagens")
             by_client2, details2 = build_summary(merged.dropna(subset=["Preco"]))
             if not details2:
@@ -1914,7 +1960,8 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                 disabled=True,
             )
 
-        with tab_labels:
+        if tab_labels is not None:
+            with tab_labels:
             st.subheader("Etiquetas 10×15 (imprimir)")
             st.caption("Uma etiqueta por linha de produto: nome, referência+quantidade, preço unitário e (opcional) hora.")
             if nav == "Etiquetas 10×15":
