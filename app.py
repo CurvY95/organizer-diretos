@@ -56,7 +56,7 @@ def _load_from_csvs(orders_file, prices_file) -> tuple[pd.DataFrame, pd.DataFram
     return orders_df, prices_df
 
 
-def _read_csv_bytes_best_effort(raw: bytes, *, sep: str) -> pd.DataFrame:
+def _read_csv_bytes_best_effort(raw: bytes, *, sep: str, force_text: bool = True) -> pd.DataFrame:
     """
     Windows/Excel often saves CSVs in cp1252/latin1; Mac edits are more often UTF-8.
     Try a small set of encodings so uploads don't crash with UnicodeDecodeError.
@@ -70,6 +70,8 @@ def _read_csv_bytes_best_effort(raw: bytes, *, sep: str) -> pd.DataFrame:
                 sep=sep,
                 encoding=enc,
                 encoding_errors="replace",
+                dtype=(str if force_text else None),
+                keep_default_na=False,
             )
         except Exception as e:
             last_err = e
@@ -374,6 +376,34 @@ def _discard_all_pending_changes() -> None:
         d2["ProdutoKey"] = d2["ProdutoKey"].astype(str).map(lambda s: oc.normalize_produto_key(s))
         d2["Preco"] = d2["ProdutoKey"].map(lambda k: cur.get(str(k), None))
         st.session_state["price_draft"] = d2
+
+
+def _build_orders_for_calc_from_state(*, orders_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Build the canonical `orders_for_calc` DataFrame for calculations, regardless of which page is open.
+    Prefers committed draft in session_state (after user clicks 'Aplicar alterações').
+    """
+    # Preferred source: committed draft (UI columns)
+    if "orders_draft" in st.session_state and isinstance(st.session_state.get("orders_draft"), pd.DataFrame):
+        committed_ui = st.session_state["orders_draft"].copy()
+        out = committed_ui.rename(
+            columns={
+                "Referência": "Produto",
+                "User ID": "UserId",
+                "Profile ID": "ProfileId",
+                "Comentário": "Comentario",
+            }
+        ).copy()
+        if "Incluir" in out.columns:
+            out = out[out["Incluir"].fillna(True)].copy()
+            out = out.drop(columns=["Incluir"], errors="ignore")
+        return out
+
+    # Fallback: build from raw upload (no UI draft yet)
+    base = _standardize_df_columns(orders_df)
+    base = _apply_aliases(base, ORDERS_ALIASES)
+    _validate_required_cols(base, REQUIRED_ORDERS_COLS, "Encomendas (Comments)")
+    return base.copy()
 
 
 def _secrets_safe_get(key: str, default: str = "") -> str:
@@ -964,7 +994,7 @@ else:
                     semicolons = first_line.count(";")
                     commas = first_line.count(",")
                     sep = ";" if semicolons > commas else ","
-                    orders_df = _read_csv_bytes_best_effort(raw, sep=sep)
+                    orders_df = _read_csv_bytes_best_effort(raw, sep=sep, force_text=True)
                     orders_source_label = f"CSV: {uploaded.name}"
                 else:
                     raw = uploaded.getvalue()
@@ -983,7 +1013,8 @@ else:
                         index=(1 + sheet_names.index(default_prices)) if default_prices in sheet_names else 0,
                         help="Se escolher uma aba aqui, os preços do Excel ficam disponíveis para importar automaticamente.",
                     )
-                    orders_df = pd.read_excel(excel, sheet_name=orders_sheet)
+                    # Read as text to avoid scientific notation for IDs (Excel/Windows)
+                    orders_df = pd.read_excel(excel, sheet_name=orders_sheet, dtype=str)
                     orders_source_label = f"Excel: {uploaded.name} / aba: {orders_sheet}"
                     if prices_sheet and prices_sheet != "(nenhuma)":
                         try:
@@ -1331,6 +1362,9 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                             pass
                         st.success(f"Sessão guardada: {sid} (ficheiro local + base de dados, se configurada).")
 
+        # Ensure this exists on all pages (Preços/Mensagens/Etiquetas) even if Encomendas page wasn't opened.
+        orders_for_calc = _build_orders_for_calc_from_state(orders_df=orders_df)
+
         parsed = parse_inputs(
             orders_for_calc,
             prices_df,
@@ -1442,7 +1476,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     semicolons = first_line.count(";")
                     commas = first_line.count(",")
                     sep = ";" if semicolons > commas else ","
-                    return _read_csv_bytes_best_effort(raw, sep=sep)
+                    return _read_csv_bytes_best_effort(raw, sep=sep, force_text=True)
                 # xlsx
                 excel = pd.ExcelFile(io.BytesIO(raw))
                 sheet_names = excel.sheet_names
@@ -2337,6 +2371,10 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         "Quantidade": "quantidade",
                     }
                 )
+                if "user_id" in export_df.columns:
+                    export_df["user_id"] = export_df["user_id"].astype(str).str.strip()
+                if "profile_id" in export_df.columns:
+                    export_df["profile_id"] = export_df["profile_id"].astype(str).str.strip()
                 st.download_button(
                     "Download encomendas (.csv)",
                     data=export_df.to_csv(index=False).encode("utf-8"),
