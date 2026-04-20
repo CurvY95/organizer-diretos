@@ -2212,8 +2212,27 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 )
                 # Ordenação: sempre por Hora quando existir (cronológica), senão por Nome/Referência
                 if has_hora:
-                    # `Hora` aqui é tipicamente duração (mm:ss ou hh:mm:ss), não hora do dia.
-                    dt = pd.to_timedelta(labels_df["Hora"].astype(str).str.strip(), errors="coerce")
+                    # `Hora` é timestamp do vídeo: aceita `m:ss` e `h:mm:ss` (assume 0h quando faltar).
+                    def _parse_hora_to_timedelta(s: str) -> Optional[pd.Timedelta]:
+                        s = str(s or "").strip()
+                        if not s:
+                            return None
+                        parts = s.split(":")
+                        try:
+                            if len(parts) == 2:  # m:ss
+                                m = int(parts[0])
+                                sec = int(parts[1])
+                                return pd.to_timedelta(m * 60 + sec, unit="s")
+                            if len(parts) == 3:  # h:mm:ss
+                                h = int(parts[0])
+                                m = int(parts[1])
+                                sec = int(parts[2])
+                                return pd.to_timedelta(h * 3600 + m * 60 + sec, unit="s")
+                        except Exception:
+                            return None
+                        return None
+
+                    dt = labels_df["Hora"].map(_parse_hora_to_timedelta)
                     labels_df = (
                         labels_df.assign(_HoraSort=dt)
                         .sort_values(["_HoraSort", "Cliente", "Referência"])
