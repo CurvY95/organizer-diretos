@@ -837,9 +837,8 @@ ___BRAND_VARS___
   }
   :is(div.stButton, form[data-testid="stForm"]) button[data-testid="baseButton-primary"],
   :is(div.stButton, form[data-testid="stForm"]) button[data-testid="stBaseButton-primary"],
-  :is(div.stButton, form[data-testid="stForm"]) button[data-testid*="primary"],
+  button[data-testid="baseButton-primary"],
   button[data-testid="stBaseButton-primary"],
-  button[data-testid*="primary"],
   button[kind="primary"] {
     background: var(--od-success) !important;
     color: #ffffff !important;
@@ -849,17 +848,15 @@ ___BRAND_VARS___
   }
   :is(div.stButton, form[data-testid="stForm"]) button[data-testid="baseButton-primary"] *,
   :is(div.stButton, form[data-testid="stForm"]) button[data-testid="stBaseButton-primary"] *,
-  :is(div.stButton, form[data-testid="stForm"]) button[data-testid*="primary"] *,
+  button[data-testid="baseButton-primary"] *,
   button[data-testid="stBaseButton-primary"] *,
-  button[data-testid*="primary"] *,
   button[kind="primary"] * {
     color: #ffffff !important;
   }
   :is(div.stButton, form[data-testid="stForm"]) button[data-testid="baseButton-primary"] p,
   :is(div.stButton, form[data-testid="stForm"]) button[data-testid="stBaseButton-primary"] p,
-  :is(div.stButton, form[data-testid="stForm"]) button[data-testid*="primary"] p,
+  button[data-testid="baseButton-primary"] p,
   button[data-testid="stBaseButton-primary"] p,
-  button[data-testid*="primary"] p,
   button[kind="primary"] p {
     color: #ffffff !important;
   }
@@ -867,17 +864,14 @@ ___BRAND_VARS___
   :is(div.stButton, form[data-testid="stForm"]) button[data-testid="baseButton-primary"]:focus,
   :is(div.stButton, form[data-testid="stForm"]) button[data-testid="stBaseButton-primary"]:hover,
   :is(div.stButton, form[data-testid="stForm"]) button[data-testid="stBaseButton-primary"]:focus,
-  :is(div.stButton, form[data-testid="stForm"]) button[data-testid*="primary"]:hover,
-  :is(div.stButton, form[data-testid="stForm"]) button[data-testid*="primary"]:focus,
+  button[data-testid="baseButton-primary"]:hover,
+  button[data-testid="baseButton-primary"]:focus,
   button[data-testid="stBaseButton-primary"]:hover,
   button[data-testid="stBaseButton-primary"]:focus,
-  button[data-testid*="primary"]:hover,
-  button[data-testid*="primary"]:focus,
   button[kind="primary"]:hover,
   button[kind="primary"]:focus,
   :is(div.stButton, form[data-testid="stForm"]) button[data-testid="baseButton-primary"]:focus-visible,
-  :is(div.stButton, form[data-testid="stForm"]) button[data-testid="stBaseButton-primary"]:focus-visible,
-  :is(div.stButton, form[data-testid="stForm"]) button[data-testid*="primary"]:focus-visible {
+  :is(div.stButton, form[data-testid="stForm"]) button[data-testid="stBaseButton-primary"]:focus-visible {
     background: #11652f !important;
     color: #ffffff !important;
     border-color: #11652f !important;
@@ -886,9 +880,8 @@ ___BRAND_VARS___
   }
   :is(div.stButton, form[data-testid="stForm"]) button[data-testid="baseButton-primary"]:active,
   :is(div.stButton, form[data-testid="stForm"]) button[data-testid="stBaseButton-primary"]:active,
-  :is(div.stButton, form[data-testid="stForm"]) button[data-testid*="primary"]:active,
+  button[data-testid="baseButton-primary"]:active,
   button[data-testid="stBaseButton-primary"]:active,
-  button[data-testid*="primary"]:active,
   button[kind="primary"]:active {
     background: #0d4f25 !important;
     color: #ffffff !important;
@@ -896,12 +889,81 @@ ___BRAND_VARS___
   }
   :is(div.stButton, form[data-testid="stForm"]) button[data-testid="baseButton-primary"]:active p,
   :is(div.stButton, form[data-testid="stForm"]) button[data-testid="stBaseButton-primary"]:active p,
-  :is(div.stButton, form[data-testid="stForm"]) button[data-testid*="primary"]:active p,
+  button[data-testid="baseButton-primary"]:active p,
   button[data-testid="stBaseButton-primary"]:active p,
-  button[data-testid*="primary"]:active p,
   button[kind="primary"]:active p {
     color: #ffffff !important;
   }
+
+  /* Tema Streamlit/Base Web: no :active o fundo pode ficar preto e o texto continuar escuro (preto em preto). */
+  :is(div.stButton, form[data-testid="stForm"], div.stDownloadButton) button[data-testid="stBaseButton-secondary"]:not([disabled]),
+  button[data-testid="stBaseButton-secondary"]:not([disabled]) {
+    background-color: #ffffff !important;
+    background-image: none !important;
+    color: var(--od-ink) !important;
+  }
+  :is(div.stButton, form[data-testid="stForm"], div.stDownloadButton) button[data-testid="stBaseButton-secondary"]:hover:not([disabled]),
+  button[data-testid="stBaseButton-secondary"]:hover:not([disabled]),
+  :is(div.stButton, form[data-testid="stForm"], div.stDownloadButton) button[data-testid="stBaseButton-secondary"]:focus:not([disabled]),
+  button[data-testid="stBaseButton-secondary"]:focus:not([disabled]),
+  :is(div.stButton, form[data-testid="stForm"], div.stDownloadButton) button[data-testid="stBaseButton-secondary"]:focus-visible:not([disabled]),
+  button[data-testid="stBaseButton-secondary"]:focus-visible:not([disabled]) {
+    background-color: #f7faf8 !important;
+    background-image: none !important;
+    color: var(--od-ink) !important;
+  }
+  :is(div.stButton, form[data-testid="stForm"], div.stDownloadButton) button[data-testid="stBaseButton-secondary"]:active:not([disabled]),
+  button[data-testid="stBaseButton-secondary"]:active:not([disabled]) {
+    background-color: #e8f7ee !important;
+    background-image: none !important;
+    color: var(--od-ink) !important;
+    box-shadow: none !important;
+  }
+  :is(div.stButton, form[data-testid="stForm"], div.stDownloadButton) button[data-testid="stBaseButton-secondary"] p,
+  :is(div.stButton, form[data-testid="stForm"], div.stDownloadButton) button[data-testid="stBaseButton-secondary"] span,
+  :is(div.stButton, form[data-testid="stForm"], div.stDownloadButton) button[data-testid="stBaseButton-secondary"]:active p,
+  button[data-testid="stBaseButton-secondary"] p,
+  button[data-testid="stBaseButton-secondary"] span,
+  button[data-testid="stBaseButton-secondary"]:active p {
+    color: var(--od-ink) !important;
+  }
+  :is(div.stButton, form[data-testid="stForm"], div.stDownloadButton) button[data-testid="stBaseButton-tertiary"]:not([disabled]),
+  button[data-testid="stBaseButton-tertiary"]:not([disabled]) {
+    background-color: transparent !important;
+    background-image: none !important;
+    color: var(--od-ink) !important;
+  }
+  :is(div.stButton, form[data-testid="stForm"], div.stDownloadButton) button[data-testid="stBaseButton-tertiary"]:hover:not([disabled]),
+  button[data-testid="stBaseButton-tertiary"]:hover:not([disabled]),
+  :is(div.stButton, form[data-testid="stForm"], div.stDownloadButton) button[data-testid="stBaseButton-tertiary"]:focus:not([disabled]),
+  button[data-testid="stBaseButton-tertiary"]:focus:not([disabled]),
+  :is(div.stButton, form[data-testid="stForm"], div.stDownloadButton) button[data-testid="stBaseButton-tertiary"]:focus-visible:not([disabled]),
+  button[data-testid="stBaseButton-tertiary"]:focus-visible:not([disabled]) {
+    background-color: rgba(22, 128, 60, 0.08) !important;
+    color: var(--od-ink) !important;
+  }
+  :is(div.stButton, form[data-testid="stForm"], div.stDownloadButton) button[data-testid="stBaseButton-tertiary"]:active:not([disabled]),
+  button[data-testid="stBaseButton-tertiary"]:active:not([disabled]) {
+    background-color: rgba(22, 128, 60, 0.14) !important;
+    color: var(--od-ink) !important;
+  }
+  :is(div.stButton, form[data-testid="stForm"], div.stDownloadButton) button[data-testid="stBaseButton-tertiary"] p,
+  :is(div.stButton, form[data-testid="stForm"], div.stDownloadButton) button[data-testid="stBaseButton-tertiary"] span,
+  button[data-testid="stBaseButton-tertiary"] p,
+  button[data-testid="stBaseButton-tertiary"] span {
+    color: var(--od-ink) !important;
+  }
+
+  /* Fallback se o testid do Streamlit mudar ligeiramente: nunca deixar :active escuro + texto escuro. */
+  button[data-testid^="stBaseButton"]:not([data-testid="stBaseButton-primary"]):not([data-testid="baseButton-primary"]):active:not([disabled]) {
+    background-color: #e8f7ee !important;
+    background-image: none !important;
+    color: var(--od-ink) !important;
+  }
+  button[data-testid^="stBaseButton"]:not([data-testid="stBaseButton-primary"]):not([data-testid="baseButton-primary"]):active:not([disabled]) p {
+    color: var(--od-ink) !important;
+  }
+
   :is(div.stButton, form[data-testid="stForm"]) button:disabled, div.stDownloadButton button:disabled,
   :is(div.stButton, form[data-testid="stForm"]) button[disabled], div.stDownloadButton button[disabled],
   a[data-testid="stLinkButton"][aria-disabled="true"],
