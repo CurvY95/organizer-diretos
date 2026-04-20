@@ -51,9 +51,33 @@ def _load_from_xlsx(uploaded_file) -> tuple[pd.DataFrame, pd.DataFrame, list[str
 
 
 def _load_from_csvs(orders_file, prices_file) -> tuple[pd.DataFrame, pd.DataFrame]:
-    orders_df = pd.read_csv(orders_file)
-    prices_df = pd.read_csv(prices_file)
+    orders_df = pd.read_csv(orders_file, encoding="utf-8-sig", encoding_errors="replace")
+    prices_df = pd.read_csv(prices_file, encoding="utf-8-sig", encoding_errors="replace")
     return orders_df, prices_df
+
+
+def _read_csv_bytes_best_effort(raw: bytes, *, sep: str) -> pd.DataFrame:
+    """
+    Windows/Excel often saves CSVs in cp1252/latin1; Mac edits are more often UTF-8.
+    Try a small set of encodings so uploads don't crash with UnicodeDecodeError.
+    """
+    encodings = ["utf-8-sig", "utf-8", "cp1252", "latin1"]
+    last_err: Optional[Exception] = None
+    for enc in encodings:
+        try:
+            return pd.read_csv(
+                io.BytesIO(raw),
+                sep=sep,
+                encoding=enc,
+                encoding_errors="replace",
+            )
+        except Exception as e:
+            last_err = e
+            continue
+    # Fallback: let pandas try (may still fail, but surfaces the real error)
+    if last_err:
+        raise last_err
+    return pd.read_csv(io.BytesIO(raw), sep=sep)
 
 
 _coerce_number_series = oc.coerce_number_series
@@ -757,22 +781,37 @@ else:
                     semicolons = first_line.count(";")
                     commas = first_line.count(",")
                     sep = ";" if semicolons > commas else ","
-                    orders_df = pd.read_csv(io.BytesIO(raw), sep=sep, encoding="utf-8-sig")
+                    orders_df = _read_csv_bytes_best_effort(raw, sep=sep)
                     orders_source_label = f"CSV: {uploaded.name}"
                 else:
                     raw = uploaded.getvalue()
                     excel = pd.ExcelFile(io.BytesIO(raw))
                     sheet_names = excel.sheet_names
                     default_orders = _detect_sheet(excel, "orders")
+                    default_prices = _detect_sheet(excel, "prices")
                     orders_sheet = st.selectbox(
                         "Aba de comentários / encomendas",
                         options=sheet_names,
                         index=sheet_names.index(default_orders) if default_orders in sheet_names else 0,
                     )
+                    prices_sheet = st.selectbox(
+                        "Aba de preços (opcional)",
+                        options=["(nenhuma)"] + sheet_names,
+                        index=(1 + sheet_names.index(default_prices)) if default_prices in sheet_names else 0,
+                        help="Se escolher uma aba aqui, os preços do Excel ficam disponíveis para importar automaticamente.",
+                    )
                     orders_df = pd.read_excel(excel, sheet_name=orders_sheet)
                     orders_source_label = f"Excel: {uploaded.name} / aba: {orders_sheet}"
-                # We will always input prices in-app for this flow
-                prices_df = pd.DataFrame(columns=["Produto", "Preco"])
+                    if prices_sheet and prices_sheet != "(nenhuma)":
+                        try:
+                            prices_df = pd.read_excel(excel, sheet_name=prices_sheet)
+                        except Exception:
+                            prices_df = pd.DataFrame(columns=["Produto", "Preco"])
+                    else:
+                        prices_df = pd.DataFrame(columns=["Produto", "Preco"])
+                # CSV flow: we input prices in-app (or via upload on tab 2)
+                if name.endswith(".csv"):
+                    prices_df = pd.DataFrame(columns=["Produto", "Preco"])
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro: {e}")
 
@@ -845,22 +884,66 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
                 st.text_area("Comentário(s)", value=combined or "—", height=200, disabled=True, key="comments_text")
                 st.dataframe(vc, width="stretch")
 
-                cbtn1, cbtn2 = st.columns([1, 2])
+                # Batch mode: mark many clients, apply once
+                st.session_state.setdefault("pending_comment_clear_clients", [])
+                pending = set([str(x) for x in (st.session_state.get("pending_comment_clear_clients") or [])])
+                if client_c:
+                    pending_hint = " (já marcado)" if str(client_c) in pending else ""
+                else:
+                    pending_hint = ""
+
+                cbtn1, cbtn2, cbtn3 = st.columns([1, 1, 2])
                 with cbtn1:
-                    if st.button("Remover comentários deste cliente", type="secondary", key="remove_comments_client"):
-                        if "orders_draft" in st.session_state and isinstance(st.session_state["orders_draft"], pd.DataFrame):
-                            od = st.session_state["orders_draft"].copy()
-                            if "Comentário" in od.columns:
-                                od.loc[od["Cliente"].astype(str) == str(client_c), "Comentário"] = ""
-                            elif "Comentario" in od.columns:
-                                od.loc[od["Cliente"].astype(str) == str(client_c), "Comentario"] = ""
-                            st.session_state["orders_draft"] = od
-                            st.success("Comentários removidos.")
-                            st.rerun()
-                        else:
-                            st.warning("Abra a aba 'Encomendas' para criar o rascunho antes de remover.")
+                    add_pending = st.button(
+                        f"Marcar para remover{pending_hint}",
+                        type="secondary",
+                        key="mark_remove_comments_client",
+                        disabled=not bool(client_c),
+                    )
                 with cbtn2:
-                    st.caption("Isto remove o texto do comentário no rascunho e desaparece do resumo/mensagens/etiquetas/histórico.")
+                    clear_pending = st.button(
+                        "Limpar lista",
+                        type="secondary",
+                        key="clear_remove_comments_list",
+                        disabled=not bool(pending),
+                    )
+                with cbtn3:
+                    apply_pending = st.button(
+                        "Aplicar alterações (remover comentários)",
+                        type="primary",
+                        key="apply_remove_comments_list",
+                        disabled=not bool(pending),
+                        help="Aplica todas as remoções de uma vez (evita refresh/recalcular a cada clique).",
+                    )
+
+                if add_pending:
+                    pending.add(str(client_c))
+                    st.session_state["pending_comment_clear_clients"] = sorted(pending)
+
+                if clear_pending:
+                    st.session_state["pending_comment_clear_clients"] = []
+                    pending = set()
+
+                if pending:
+                    st.caption(f"Marcados: **{len(pending)}** cliente(s) para remover comentários.")
+
+                if apply_pending:
+                    if "orders_draft" in st.session_state and isinstance(st.session_state["orders_draft"], pd.DataFrame):
+                        od = st.session_state["orders_draft"].copy()
+                        col_comment = "Comentário" if "Comentário" in od.columns else ("Comentario" if "Comentario" in od.columns else "")
+                        if not col_comment:
+                            st.warning("Não existe coluna de comentário no rascunho.")
+                        else:
+                            mask = od["Cliente"].astype(str).isin(list(pending))
+                            od.loc[mask, col_comment] = ""
+                            st.session_state["orders_draft"] = od
+                            st.session_state["pending_comment_clear_clients"] = []
+                            st.success("Alterações aplicadas.")
+                            st.rerun()
+                    else:
+                        st.warning("Abra a aba 'Encomendas' para criar o rascunho antes de aplicar.")
+
+                st.caption("Dica: marque vários clientes e aplique no fim. Assim não 'saltas' de refresh a cada remoção.")
 
         with tab_upload:
             st.subheader("Encomendas")
@@ -1052,12 +1135,202 @@ if nav in ("Trabalho atual", "Etiquetas 10×15") and orders_df is not None and p
         )
         price_table["Preco"] = price_table["ProdutoKey"].map(st.session_state["price_overrides"])
 
+        # If the uploaded XLSX included a prices sheet, prefill draft (optional).
+        try:
+            prices_std = _standardize_df_columns(prices_df) if prices_df is not None else pd.DataFrame()
+            prices_std = _apply_aliases(prices_std, PRICES_ALIASES) if not prices_std.empty else prices_std
+            if (not prices_std.empty) and ("Produto" in prices_std.columns) and ("Preco" in prices_std.columns):
+                excel_map: dict[str, float] = {}
+                tmpx = prices_std[["Produto", "Preco"]].copy()
+                tmpx["Produto"] = tmpx["Produto"].astype(str).map(lambda s: s.strip())
+                tmpx["ProdutoKey"] = tmpx["Produto"].map(lambda s: oc.normalize_produto_key(s))
+                tmpx["Preco"] = _coerce_number_series(tmpx["Preco"])
+                tmpx = tmpx.dropna(subset=["ProdutoKey", "Preco"])
+                tmpx = tmpx[tmpx["ProdutoKey"].astype(str).str.strip() != ""]
+                for _, r in tmpx.drop_duplicates(subset=["ProdutoKey"], keep="last").iterrows():
+                    excel_map[str(r["ProdutoKey"])] = float(r["Preco"])
+
+                if excel_map:
+                    st.session_state["excel_prices_map"] = excel_map
+        except Exception:
+            pass
+
         with tab_prices:
             st.subheader("Preços")
             st.caption("Edite tudo e clique em **Guardar preços** no final. Antes de guardar, as outras abas não mudam.")
 
+            st.markdown("<div class='od-card-h'>Upload de preços</div>", unsafe_allow_html=True)
+            st.caption("Formato esperado: colunas tipo `Referencia` + `preços/precos` (CSV ou Excel). Pode conter referências a mais.")
+
+            if bool(st.session_state.get("excel_prices_map")):
+                with st.container(border=False):
+                    cmap = st.session_state.get("excel_prices_map") or {}
+                    order_keys_set = set(price_table["ProdutoKey"].astype(str).tolist())
+                    matched = len(order_keys_set.intersection(set(cmap.keys())))
+                    st.caption(f"Detetei preços no Excel: **{len(cmap)}** referência(s) · No pedido: **{matched}**")
+                    cx1, cx2, _ = st.columns([1, 1, 2])
+                    with cx1:
+                        do_excel_draft = st.button("Usar preços do Excel (rascunho)", type="secondary", key="excel_prices_to_draft")
+                    with cx2:
+                        do_excel_save = st.button("Usar preços do Excel (guardar)", type="primary", key="excel_prices_to_save")
+                    if do_excel_draft or do_excel_save:
+                        excel_prices_map = st.session_state.get("excel_prices_map") or {}
+                        draft = st.session_state.get("price_draft") or price_table[["Produto", "ProdutoKey", "Preco"]].copy()
+                        draft = draft.copy()
+                        draft["ProdutoKey"] = draft["ProdutoKey"].astype(str).map(lambda s: oc.normalize_produto_key(s))
+                        draft["Preco"] = draft["ProdutoKey"].map(lambda k: excel_prices_map.get(str(k), None)).combine_first(
+                            draft["Preco"]
+                        )
+                        st.session_state["price_draft"] = draft
+                        if do_excel_save:
+                            new_overrides: dict[str, float] = {}
+                            for _, r in draft.iterrows():
+                                k = oc.normalize_produto_key(r.get("ProdutoKey") or "")
+                                if not k:
+                                    continue
+                                v = r.get("Preco")
+                                if pd.notna(v):
+                                    new_overrides[str(k)] = float(v)
+                            st.session_state["price_overrides"] = new_overrides
+                            st.session_state["prices_last_saved_at"] = pd.Timestamp.utcnow().isoformat()
+                            st.success("Preços do Excel guardados. As outras abas já usam estes valores.")
+                        else:
+                            st.success("Preços do Excel aplicados ao rascunho. Clique em **Guardar preços** para aplicar.")
+                        st.rerun()
+
+            prices_upload = st.file_uploader(
+                "Upload preços (.csv ou .xlsx)",
+                type=["csv", "xlsx"],
+                key="prices_upload_file",
+                help="Ex.: Referencia | precos",
+            )
+
+            def _read_prices_upload(uploaded) -> pd.DataFrame:
+                name = (uploaded.name or "").lower()
+                raw = uploaded.getvalue()
+                if name.endswith(".csv"):
+                    sample = raw[:4096].decode("utf-8-sig", errors="ignore")
+                    first_line = (sample.splitlines() or [""])[0]
+                    semicolons = first_line.count(";")
+                    commas = first_line.count(",")
+                    sep = ";" if semicolons > commas else ","
+                    return _read_csv_bytes_best_effort(raw, sep=sep)
+                # xlsx
+                excel = pd.ExcelFile(io.BytesIO(raw))
+                sheet_names = excel.sheet_names
+                sheet = st.selectbox(
+                    "Aba de preços (Excel)",
+                    options=sheet_names,
+                    index=0,
+                    key="prices_upload_sheet_pick",
+                )
+                return pd.read_excel(excel, sheet_name=sheet)
+
+            def _infer_prices_columns(df: pd.DataFrame) -> tuple[str, str]:
+                cols = [str(c) for c in df.columns]
+                norm = {c: re.sub(r"[^a-z0-9]+", "", str(c).strip().lower()) for c in cols}
+                ref_candidates = {"referencia", "referência", "ref", "produto", "product", "sku"}
+                price_candidates = {"preco", "preço", "precos", "preços", "price", "valor", "unitprice"}
+
+                ref_col = ""
+                price_col = ""
+                for c, n in norm.items():
+                    if n in {re.sub(r"[^a-z0-9]+", "", x.lower()) for x in ref_candidates}:
+                        ref_col = c
+                        break
+                for c, n in norm.items():
+                    if n in {re.sub(r"[^a-z0-9]+", "", x.lower()) for x in price_candidates}:
+                        price_col = c
+                        break
+                if not ref_col:
+                    ref_col = cols[0] if cols else ""
+                if not price_col:
+                    # try second column fallback
+                    price_col = cols[1] if len(cols) > 1 else ""
+                return ref_col, price_col
+
+            uploaded_prices_map: dict[str, float] = {}
+            uploaded_rows = 0
+            uploaded_extra = 0
+            uploaded_matched = 0
+            if prices_upload is not None:
+                try:
+                    up_df = _read_prices_upload(prices_upload)
+                    if up_df is None or up_df.empty:
+                        st.warning("Ficheiro de preços vazio.")
+                    else:
+                        ref_col, price_col = _infer_prices_columns(up_df)
+                        if not ref_col or not price_col or ref_col not in up_df.columns or price_col not in up_df.columns:
+                            st.error("Não consegui detetar as colunas `Referencia` e `preços/precos` no ficheiro.")
+                        else:
+                            tmpu = up_df[[ref_col, price_col]].copy()
+                            tmpu = tmpu.rename(columns={ref_col: "Referencia", price_col: "Preco"})
+                            tmpu["Referencia"] = tmpu["Referencia"].astype(str).map(lambda s: s.strip())
+                            tmpu["ProdutoKey"] = tmpu["Referencia"].map(lambda s: oc.normalize_produto_key(s))
+                            tmpu["Preco"] = _coerce_number_series(tmpu["Preco"])
+                            tmpu = tmpu.dropna(subset=["ProdutoKey", "Preco"])
+                            tmpu = tmpu[tmpu["ProdutoKey"].astype(str).str.strip() != ""]
+                            uploaded_rows = int(tmpu.shape[0])
+                            uploaded_prices_map = {
+                                str(r["ProdutoKey"]): float(r["Preco"])
+                                for _, r in tmpu.drop_duplicates(subset=["ProdutoKey"], keep="last").iterrows()
+                            }
+
+                            order_keys_set = set(price_table["ProdutoKey"].astype(str).tolist())
+                            uploaded_keys_set = set(uploaded_prices_map.keys())
+                            uploaded_matched = len(order_keys_set.intersection(uploaded_keys_set))
+                            uploaded_extra = len(uploaded_keys_set.difference(order_keys_set))
+
+                            st.caption(
+                                f"Importado: **{len(uploaded_prices_map)}** referência(s) · "
+                                f"No pedido: **{uploaded_matched}** · A mais: **{uploaded_extra}**"
+                            )
+                except Exception as e:
+                    st.error(f"Falha ao ler preços: {e}")
+
             if "price_draft" not in st.session_state:
                 st.session_state["price_draft"] = price_table[["Produto", "ProdutoKey", "Preco"]].copy()
+
+            cimp1, cimp2, _ = st.columns([1, 1, 2])
+            with cimp1:
+                do_import_draft = st.button(
+                    "Importar p/ rascunho",
+                    type="secondary",
+                    disabled=not bool(uploaded_prices_map),
+                    help="Preenche o editor de preços (ainda não aplica ao resumo até guardares).",
+                )
+            with cimp2:
+                do_import_and_save = st.button(
+                    "Importar e Guardar preços",
+                    type="primary",
+                    disabled=not bool(uploaded_prices_map),
+                    help="Aplica já ao resumo/mensagens/etiquetas.",
+                )
+
+            if do_import_draft or do_import_and_save:
+                # Merge uploaded prices into the draft table (only keys that exist in current order)
+                draft = st.session_state["price_draft"].copy()
+                draft["ProdutoKey"] = draft["ProdutoKey"].astype(str).map(lambda s: oc.normalize_produto_key(s))
+                draft["Preco"] = draft["ProdutoKey"].map(lambda k: uploaded_prices_map.get(str(k), None)).combine_first(
+                    draft["Preco"]
+                )
+                st.session_state["price_draft"] = draft
+
+                if do_import_and_save:
+                    new_overrides: dict[str, float] = {}
+                    for _, r in draft.iterrows():
+                        k = oc.normalize_produto_key(r.get("ProdutoKey") or "")
+                        if not k:
+                            continue
+                        v = r.get("Preco")
+                        if pd.notna(v):
+                            new_overrides[str(k)] = float(v)
+                    st.session_state["price_overrides"] = new_overrides
+                    st.session_state["prices_last_saved_at"] = pd.Timestamp.utcnow().isoformat()
+                    st.success("Preços importados e guardados. As outras abas já usam estes valores.")
+                else:
+                    st.success("Preços importados para o rascunho. Clique em **Guardar preços** para aplicar.")
+                st.rerun()
 
             with st.form("prices_form", border=False):
                 edited = st.data_editor(
