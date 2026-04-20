@@ -179,9 +179,9 @@ def require_login() -> None:
         st.markdown(
             f"""
 <div class="od-nav">
-  {_logo_lg}
-  <div class="od-nav-title">Diretos <span style="opacity:0.55;font-weight:700">Pro</span></div>
-  <div class="od-nav-sub od-muted">Acesso reservado ao painel</div>
+{_logo_lg}
+<div class="od-nav-title">Diretos <span style="opacity:0.55;font-weight:700">Pro</span></div>
+<div class="od-nav-sub od-muted">Acesso reservado ao painel</div>
 </div>
 """,
             unsafe_allow_html=True,
@@ -205,10 +205,10 @@ def require_login() -> None:
         st.markdown(
             f"""
 <div class="od-hero" style="margin-top:1rem">
-  {_lg_login}
-  <div class="od-hero-kicker">{_bn_login} <span class="od-badge">Pro</span></div>
-  <div class="od-hero-title">Fecha o teu direto com precisão</div>
-  <div class="od-hero-sub od-muted">Preços, mensagens por cliente, etiquetas e histórico — num único fluxo comercial. Utiliza o login à esquerda para continuar.</div>
+{_lg_login}
+<div class="od-hero-kicker">{_bn_login} <span class="od-badge">Pro</span></div>
+<div class="od-hero-title">Fecha o teu direto com precisão</div>
+<div class="od-hero-sub od-muted">Preços, mensagens por cliente, etiquetas e histórico — num único fluxo comercial. Utiliza o login à esquerda para continuar.</div>
 </div>
 """,
             unsafe_allow_html=True,
@@ -310,8 +310,8 @@ def _section(title: str, subtitle: str = "") -> None:
     st.markdown(
         f"""
 <div class="od-section">
-  <div class="od-section-title">{html.escape(str(title or ""))}</div>
-  <div class="od-section-sub">{html.escape(str(subtitle or ""))}</div>
+<div class="od-section-title">{html.escape(str(title or ""))}</div>
+<div class="od-section-sub">{html.escape(str(subtitle or ""))}</div>
 </div>
 """,
         unsafe_allow_html=True,
@@ -898,25 +898,25 @@ _brand_logo_h = _brand_logo_img_html("od-hero-logo")
 st.markdown(
     f"""
 <div class="od-workbench">
-  <div class="od-workbench-top">
-    <div>
-      {_brand_logo_h}
-      <div class="od-hero-kicker">Painel comercial <span class="od-badge">Diretos Pro</span></div>
-      <div class="od-hero-title">{_brand_name_h}</div>
-      <div class="od-hero-sub od-muted">Importa, valida preços, fecha mensagens e prepara etiquetas sem sair do fluxo de venda.</div>
-    </div>
-    <div class="od-action-strip">
-      <span class="od-status">CSV / Excel</span>
-      <span class="od-status">Facebook Business</span>
-      <span class="od-status">Sessões guardadas</span>
-    </div>
-  </div>
-  <div class="od-stage-row">
-    <div class="od-stage"><div class="od-stage-num">01</div><div class="od-stage-title">Encomendas</div><div class="od-stage-sub">importar e limpar</div></div>
-    <div class="od-stage"><div class="od-stage-num">02</div><div class="od-stage-title">Preços</div><div class="od-stage-sub">guardar antes de vender</div></div>
-    <div class="od-stage"><div class="od-stage-num">03</div><div class="od-stage-title">Mensagens</div><div class="od-stage-sub">copiar e abrir chat</div></div>
-    <div class="od-stage"><div class="od-stage-num">04</div><div class="od-stage-title">Etiquetas</div><div class="od-stage-sub">impressão 10x15</div></div>
-  </div>
+<div class="od-workbench-top">
+<div>
+{_brand_logo_h}
+<div class="od-hero-kicker">Painel comercial <span class="od-badge">Diretos Pro</span></div>
+<div class="od-hero-title">{_brand_name_h}</div>
+<div class="od-hero-sub od-muted">Importa, valida preços, fecha mensagens e prepara etiquetas sem sair do fluxo de venda.</div>
+</div>
+<div class="od-action-strip">
+<span class="od-status">CSV / Excel</span>
+<span class="od-status">Facebook Business</span>
+<span class="od-status">Sessões guardadas</span>
+</div>
+</div>
+<div class="od-stage-row">
+<div class="od-stage"><div class="od-stage-num">01</div><div class="od-stage-title">Encomendas</div><div class="od-stage-sub">importar e limpar</div></div>
+<div class="od-stage"><div class="od-stage-num">02</div><div class="od-stage-title">Preços</div><div class="od-stage-sub">guardar antes de vender</div></div>
+<div class="od-stage"><div class="od-stage-num">03</div><div class="od-stage-title">Mensagens</div><div class="od-stage-sub">copiar e abrir chat</div></div>
+<div class="od-stage"><div class="od-stage-num">04</div><div class="od-stage-title">Etiquetas</div><div class="od-stage-sub">impressão 10x15</div></div>
+</div>
 </div>
 """,
     unsafe_allow_html=True,
@@ -930,9 +930,9 @@ with st.sidebar:
     st.markdown(
         f"""
 <div class="od-nav">
-  {_logo_sb}
-  <div class="od-nav-title">Diretos <span style="opacity:0.55;font-weight:700">Pro</span></div>
-  <div class="od-nav-sub od-muted">{_tag_sb}</div>
+{_logo_sb}
+<div class="od-nav-title">Diretos <span style="opacity:0.55;font-weight:700">Pro</span></div>
+<div class="od-nav-sub od-muted">{_tag_sb}</div>
 </div>
 """,
         unsafe_allow_html=True,
@@ -1878,10 +1878,10 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
         st.markdown(
             f"""
 <div class="od-kpi-line">
-  <span class="od-kpi">Clientes: {clients_global}</span>
-  <span class="od-kpi">Linhas: {total_rows_global}</span>
-  <span class="od-kpi">Referências: {refs_global}</span>
-  <span class="od-kpi">Com preço: {priced_rows_global}/{total_rows_global}</span>
+<span class="od-kpi">Clientes: {clients_global}</span>
+<span class="od-kpi">Linhas: {total_rows_global}</span>
+<span class="od-kpi">Referências: {refs_global}</span>
+<span class="od-kpi">Com preço: {priced_rows_global}/{total_rows_global}</span>
 </div>
 """,
             unsafe_allow_html=True,
