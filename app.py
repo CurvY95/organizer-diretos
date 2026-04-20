@@ -2181,7 +2181,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
         if tab_labels is not None:
             with tab_labels:
                 st.subheader("Etiquetas 10×15 (imprimir)")
-                st.caption("Uma etiqueta por linha de produto: nome, referência+quantidade, preço unitário e (opcional) hora.")
+                st.caption("Formato: Nome · Referência — Quantidade · Preço da referência")
 
                 base = merged.dropna(subset=["Preco"]).copy()
                 if base.empty:
@@ -2194,6 +2194,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 has_hora = "Hora" in base.columns
                 agg_spec = {"Quantidade": ("Quantidade", "sum"), "Preco": ("Preco", "max")}
                 if has_hora:
+                    # keep Hora only to sort labels chronologically (not printed)
                     agg_spec["Hora"] = ("Hora", "min")
 
                 labels_df = (
@@ -2209,22 +2210,16 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     horizontal=True,
                     key="labels_pick_mode",
                 )
-                order = st.selectbox(
-                    "Ordenar por",
-                    options=(["Nome"] + (["Hora"] if has_hora else [])),
-                    index=0,
-                    key="labels_order",
-                )
-                if order == "Nome":
-                    labels_df = labels_df.sort_values(["Cliente", "Referência"])
-                elif order == "Hora" and has_hora:
-                    # Try to sort by parsed datetime; fallback to raw string
+                # Ordenação: sempre por Hora quando existir (cronológica), senão por Nome/Referência
+                if has_hora:
                     dt = pd.to_datetime(labels_df["Hora"], errors="coerce", dayfirst=True)
                     labels_df = (
                         labels_df.assign(_HoraSort=dt)
                         .sort_values(["_HoraSort", "Cliente", "Referência"])
                         .drop(columns=["_HoraSort"])
                     )
+                else:
+                    labels_df = labels_df.sort_values(["Cliente", "Referência"])
 
                 if mode == "Selecionar (uma/várias)":
                     labels_df["Imprimir"] = False
@@ -2239,7 +2234,6 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         "Referência": st.column_config.TextColumn("Referência", disabled=True),
                         "Quantidade": st.column_config.NumberColumn("Qtd", disabled=True, format="%.3g"),
                         "Preco": st.column_config.NumberColumn("Preço unit.", disabled=True, format="%.2f"),
-                        **({"Hora": st.column_config.TextColumn("Hora", disabled=True)} if has_hora else {}),
                     },
                     key="labels_editor",
                 )
@@ -2252,7 +2246,6 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
   <div class="label">
     <div class="client">{b['cliente']}</div>
     <div class="line">{b['referencia']} — {b['quantidade']}</div>
-    {f"<div class='od-small' style='opacity:.75'>Hora: {b['hora']}</div>" if b.get("hora") else ""}
     <div class="price">{b['preco_unit']}</div>
   </div>
 """
@@ -2301,7 +2294,6 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         "referencia": str(row["Referência"]),
                         "quantidade": f"{float(row['Quantidade']):g}",
                         "preco_unit": f"Preço: {format_currency(float(row['Preco']), currency)}",
-                        "hora": (str(row["Hora"]) if has_hora and pd.notna(row.get("Hora")) and str(row.get("Hora")).strip() else ""),
                     }
                 )
 
