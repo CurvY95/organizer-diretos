@@ -746,9 +746,22 @@ ___BRAND_VARS___
     color: var(--od-ink) !important;
     transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease !important;
   }
-  div.stButton > button:hover, div.stDownloadButton > button:hover, a[data-testid="stLinkButton"]:hover {
+  div.stButton > button *, div.stDownloadButton > button *, a[data-testid="stLinkButton"] * {
+    color: inherit !important;
+  }
+  div.stButton > button:hover, div.stDownloadButton > button:hover, a[data-testid="stLinkButton"]:hover,
+  div.stButton > button:focus, div.stDownloadButton > button:focus, a[data-testid="stLinkButton"]:focus {
+    background: #f7faf8 !important;
+    color: var(--od-ink) !important;
     border-color: var(--od-hover-ring) !important;
-    box-shadow: 0 0 0 1px var(--od-hover-shadow) !important;
+    box-shadow: 0 0 0 3px rgba(22, 128, 60, 0.12) !important;
+    outline: none !important;
+  }
+  div.stButton > button:active, div.stDownloadButton > button:active, a[data-testid="stLinkButton"]:active {
+    background: #e8f7ee !important;
+    color: var(--od-ink) !important;
+    border-color: var(--od-success) !important;
+    transform: translateY(1px);
   }
   div.stButton > button[data-testid="baseButton-primary"],
   button[kind="primary"] {
@@ -758,9 +771,36 @@ ___BRAND_VARS___
     font-weight: 800 !important;
     box-shadow: none !important;
   }
-  div.stButton > button[data-testid="baseButton-primary"]:hover {
+  div.stButton > button[data-testid="baseButton-primary"] *,
+  button[kind="primary"] * {
+    color: #ffffff !important;
+  }
+  div.stButton > button[data-testid="baseButton-primary"]:hover,
+  div.stButton > button[data-testid="baseButton-primary"]:focus,
+  button[kind="primary"]:hover,
+  button[kind="primary"]:focus {
     background: #000000 !important;
+    color: #ffffff !important;
     box-shadow: 0 0 0 3px rgba(22, 128, 60, 0.14) !important;
+    outline: none !important;
+  }
+  div.stButton > button[data-testid="baseButton-primary"]:active,
+  button[kind="primary"]:active {
+    background: var(--od-success) !important;
+    color: #ffffff !important;
+    border-color: var(--od-success) !important;
+  }
+  div.stButton > button:disabled, div.stDownloadButton > button:disabled,
+  div.stButton > button[disabled], div.stDownloadButton > button[disabled] {
+    background: #eef1ef !important;
+    color: #8a938e !important;
+    border-color: #d9dedb !important;
+    opacity: 1 !important;
+    cursor: not-allowed !important;
+  }
+  div.stButton > button:disabled *, div.stDownloadButton > button:disabled *,
+  div.stButton > button[disabled] *, div.stDownloadButton > button[disabled] * {
+    color: #8a938e !important;
   }
 
   [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
