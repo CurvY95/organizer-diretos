@@ -273,6 +273,109 @@ def _merged_session_rows() -> list[dict]:
     return rows
 
 
+def _orders_dirty() -> bool:
+    try:
+        if "orders_working" not in st.session_state or "orders_draft" not in st.session_state:
+            return False
+        w = st.session_state.get("orders_working")
+        c = st.session_state.get("orders_draft")
+        if not isinstance(w, pd.DataFrame) or not isinstance(c, pd.DataFrame):
+            return False
+        # Align common columns and normalize NaNs so equals is stable.
+        common = [col for col in c.columns if col in w.columns]
+        w2 = w[common].copy()
+        c2 = c[common].copy()
+        return not w2.fillna("").equals(c2.fillna(""))
+    except Exception:
+        return False
+
+
+def _pending_comments_dirty() -> bool:
+    return bool(st.session_state.get("pending_comment_clear_clients") or [])
+
+
+def _prices_dirty() -> bool:
+    try:
+        draft = st.session_state.get("price_draft")
+        if not isinstance(draft, pd.DataFrame):
+            return False
+        current = st.session_state.get("price_overrides") or {}
+        new_overrides: dict[str, float] = {}
+        for _, r in draft.iterrows():
+            k = oc.normalize_produto_key(r.get("ProdutoKey") or "")
+            if not k:
+                continue
+            v = r.get("Preco")
+            if pd.notna(v):
+                new_overrides[str(k)] = float(v)
+        # Compare dicts with stable key set
+        if set(new_overrides.keys()) != set(current.keys()):
+            return True
+        for k, v in new_overrides.items():
+            if float(current.get(k) or 0.0) != float(v):
+                return True
+        return False
+    except Exception:
+        return False
+
+
+def _has_unsaved_changes() -> bool:
+    return _orders_dirty() or _prices_dirty() or _pending_comments_dirty()
+
+
+def _apply_pending_comment_removals_to_df(df: pd.DataFrame) -> pd.DataFrame:
+    pending = set([str(x) for x in (st.session_state.get("pending_comment_clear_clients") or [])])
+    if not pending:
+        return df
+    out = df.copy()
+    col_comment = "Comentário" if "Comentário" in out.columns else ("Comentario" if "Comentario" in out.columns else "")
+    if not col_comment:
+        return out
+    mask = out["Cliente"].astype(str).isin(list(pending))
+    out.loc[mask, col_comment] = ""
+    return out
+
+
+def _save_all_pending_changes() -> None:
+    # Orders (also applies pending comment removals if any)
+    if "orders_working" in st.session_state and isinstance(st.session_state.get("orders_working"), pd.DataFrame):
+        w = st.session_state["orders_working"].copy()
+        w = _apply_pending_comment_removals_to_df(w)
+        st.session_state["orders_working"] = w
+        st.session_state["orders_draft"] = w.copy()
+    st.session_state["pending_comment_clear_clients"] = []
+
+    # Prices
+    draft = st.session_state.get("price_draft")
+    if isinstance(draft, pd.DataFrame):
+        new_overrides: dict[str, float] = {}
+        for _, r in draft.iterrows():
+            k = oc.normalize_produto_key(r.get("ProdutoKey") or "")
+            if not k:
+                continue
+            v = r.get("Preco")
+            if pd.notna(v):
+                new_overrides[str(k)] = float(v)
+        st.session_state["price_overrides"] = new_overrides
+        st.session_state["prices_last_saved_at"] = pd.Timestamp.utcnow().isoformat()
+
+
+def _discard_all_pending_changes() -> None:
+    # Orders: drop working edits back to committed
+    if "orders_draft" in st.session_state and isinstance(st.session_state.get("orders_draft"), pd.DataFrame):
+        st.session_state["orders_working"] = st.session_state["orders_draft"].copy()
+    st.session_state["pending_comment_clear_clients"] = []
+
+    # Prices: reset draft back to saved overrides
+    draft = st.session_state.get("price_draft")
+    if isinstance(draft, pd.DataFrame):
+        cur = st.session_state.get("price_overrides") or {}
+        d2 = draft.copy()
+        d2["ProdutoKey"] = d2["ProdutoKey"].astype(str).map(lambda s: oc.normalize_produto_key(s))
+        d2["Preco"] = d2["ProdutoKey"].map(lambda k: cur.get(str(k), None))
+        st.session_state["price_draft"] = d2
+
+
 def _secrets_safe_get(key: str, default: str = "") -> str:
     try:
         secrets = getattr(st, "secrets", {}) or {}
@@ -640,12 +743,28 @@ with st.sidebar:
         ("Histórico", "Histórico"),
         ("Definições", "Definições"),
     ]
+    st.session_state.setdefault("nav_committed", st.session_state.get("nav_page", "Operação"))
+
+    def _on_nav_change():
+        new_nav = st.session_state.get("nav_page")
+        committed = st.session_state.get("nav_committed")
+        if not new_nav or new_nav == committed:
+            return
+        if _has_unsaved_changes():
+            st.session_state["nav_pending"] = new_nav
+            # revert selection until user decides
+            st.session_state["nav_page"] = committed
+            st.session_state["show_unsaved_nav_dialog"] = True
+        else:
+            st.session_state["nav_committed"] = new_nav
+
     nav = st.radio(
         "Navegação",
         options=[k for k, _ in NAV_ITEMS],
         index=0,
         label_visibility="collapsed",
         key="nav_page",
+        on_change=_on_nav_change,
         format_func=lambda k: {
             "Operação": "Operação",
             "Preços": "Preços",
@@ -675,6 +794,44 @@ with st.sidebar:
             st.rerun()
 
 st.divider()
+
+# Unsaved changes modal (navigation guard)
+if bool(st.session_state.get("show_unsaved_nav_dialog")):
+
+    @st.dialog("Alterações não guardadas")
+    def _unsaved_dialog():
+        dirty_bits: list[str] = []
+        if _orders_dirty():
+            dirty_bits.append("Encomendas")
+        if _pending_comments_dirty():
+            dirty_bits.append("Comentários (em lote)")
+        if _prices_dirty():
+            dirty_bits.append("Preços")
+        st.write("Tens alterações não guardadas em:")
+        st.write(", ".join(dirty_bits) if dirty_bits else "—")
+        st.caption("Queres sair desta página sem guardar? Podes guardar agora ou sair sem guardar.")
+
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Guardar", type="primary", width="stretch"):
+                _save_all_pending_changes()
+                nxt = st.session_state.get("nav_pending") or st.session_state.get("nav_committed")
+                st.session_state["nav_committed"] = nxt
+                st.session_state["nav_page"] = nxt
+                st.session_state["nav_pending"] = None
+                st.session_state["show_unsaved_nav_dialog"] = False
+                st.rerun()
+        with c2:
+            if st.button("Sair sem guardar", type="secondary", width="stretch"):
+                _discard_all_pending_changes()
+                nxt = st.session_state.get("nav_pending") or st.session_state.get("nav_committed")
+                st.session_state["nav_committed"] = nxt
+                st.session_state["nav_page"] = nxt
+                st.session_state["nav_pending"] = None
+                st.session_state["show_unsaved_nav_dialog"] = False
+                st.rerun()
+
+    _unsaved_dialog()
 
 # Defaults for "Definições gerais"
 st.session_state.setdefault("currency", "EUR")
@@ -1030,12 +1187,17 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 ):
                     st.session_state["orders_draft_source"] = (orders_source_label or "")
                     st.session_state["orders_draft"] = orders_edit.copy()
-                orders_draft = st.session_state["orders_draft"].copy()
-
-                # Force numeric dtype so the editor allows changing values reliably
-                orders_draft["Quantidade"] = _coerce_number_series(orders_draft["Quantidade"])
+                # Committed vs working edits (SaaS-style: apply at the end)
+                committed = st.session_state["orders_draft"].copy()
+                committed["Quantidade"] = _coerce_number_series(committed["Quantidade"])
                 if fill_missing_qty:
-                    orders_draft["Quantidade"] = orders_draft["Quantidade"].fillna(1.0)
+                    committed["Quantidade"] = committed["Quantidade"].fillna(1.0)
+
+                if "orders_working" not in st.session_state or st.session_state.get("orders_working_source") != (
+                    orders_source_label or ""
+                ):
+                    st.session_state["orders_working_source"] = (orders_source_label or "")
+                    st.session_state["orders_working"] = committed.copy()
 
                 col_cfg = {
                     "Incluir": st.column_config.CheckboxColumn("Incluir", help="Se desativar, esta linha não entra nas contas."),
@@ -1044,7 +1206,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     "Referência": st.column_config.TextColumn("Referência", disabled=True),
                     "Quantidade": st.column_config.NumberColumn("Quantidade", min_value=0.0, step=0.5, format="%.3g"),
                 }
-                if "Comentário" in orders_draft.columns:
+                if "Comentário" in committed.columns:
                     col_cfg["Comentário"] = st.column_config.TextColumn("Comentário", help="Editar/apagar aqui reflete em todo o lado.")
                 if "User ID" in orders_edit.columns:
                     col_cfg["User ID"] = st.column_config.TextColumn("User ID", disabled=True)
@@ -1052,19 +1214,41 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 if "Profile ID" in orders_edit.columns:
                     col_cfg["Profile ID"] = st.column_config.TextColumn("Profile ID", disabled=True)
 
-                edited_orders = st.data_editor(
-                    orders_draft,
-                    width="stretch",
-                    num_rows="fixed",
-                    column_config={
-                        **col_cfg,
-                    },
-                    key="comments_editor",
-                )
-                st.session_state["orders_draft"] = edited_orders.copy()
+                st.markdown("<div class='od-card-h' style='margin-top:6px'>Edição (aplicar no fim)</div>", unsafe_allow_html=True)
+                st.caption("Edite à vontade. Clique **Aplicar alterações** para atualizar o resumo/mensagens/etiquetas de uma vez.")
 
-                # Convert back to expected input shape
-                orders_for_calc = edited_orders.rename(
+                with st.form("orders_form", border=False):
+                    edited_orders = st.data_editor(
+                        st.session_state["orders_working"],
+                        width="stretch",
+                        num_rows="fixed",
+                        column_config={
+                            **col_cfg,
+                        },
+                        key="comments_editor",
+                    )
+                    b1, b2, _ = st.columns([1, 1, 2])
+                    with b1:
+                        do_apply_orders = st.form_submit_button("Aplicar alterações", type="primary")
+                    with b2:
+                        do_reset_orders = st.form_submit_button("Repor (voltar ao guardado)")
+
+                # Keep working state updated only inside the form flow
+                st.session_state["orders_working"] = edited_orders.copy()
+
+                if do_reset_orders:
+                    st.session_state["orders_working"] = committed.copy()
+                    st.success("Rascunho reposto.")
+                    st.rerun()
+
+                if do_apply_orders:
+                    st.session_state["orders_draft"] = edited_orders.copy()
+                    committed = st.session_state["orders_draft"].copy()
+                    st.success("Alterações aplicadas.")
+                    st.rerun()
+
+                # Convert committed orders back to expected input shape (calculations use committed only)
+                orders_for_calc = committed.rename(
                     columns={
                         "Referência": "Produto",
                         "User ID": "UserId",
@@ -1200,8 +1384,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
         if tab_prices is not None:
             with tab_prices:
-            st.subheader("Preços")
-            st.caption("Edite tudo e clique em **Guardar preços** no final. Antes de guardar, as outras abas não mudam.")
+                st.subheader("Preços")
+                st.caption("Edite tudo e clique em **Guardar preços** no final. Antes de guardar, as outras abas não mudam.")
 
             st.markdown("<div class='od-card-h'>Upload de preços</div>", unsafe_allow_html=True)
             st.caption("Formato esperado: colunas tipo `Referencia` + `preços/precos` (CSV ou Excel). Pode conter referências a mais.")
@@ -1558,30 +1742,30 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 )
                 summary = summary.sort_values(["Cliente"])
 
-            total_geral = float(summary["Total"].sum()) if not summary.empty else 0.0
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Clientes", int(summary.shape[0]))
-            c2.metric("Total geral", format_currency(total_geral, currency))
-            c3.metric("Referências", int(merged["ProdutoKey"].nunique()) if "ProdutoKey" in merged.columns else 0)
+                total_geral = float(summary["Total"].sum()) if not summary.empty else 0.0
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Clientes", int(summary.shape[0]))
+                c2.metric("Total geral", format_currency(total_geral, currency))
+                c3.metric("Referências", int(merged["ProdutoKey"].nunique()) if "ProdutoKey" in merged.columns else 0)
 
-            summary_display = summary.copy()
-            summary_display["Total"] = summary_display["Total"].map(lambda v: format_currency(float(v), currency))
-            st.dataframe(summary_display, width="stretch")
+                summary_display = summary.copy()
+                summary_display["Total"] = summary_display["Total"].map(lambda v: format_currency(float(v), currency))
+                st.dataframe(summary_display, width="stretch")
 
-            st.subheader("Detalhe por cliente")
-            tpl_ver = template_version(intro, total_line_template, outro)
-            for client in summary["Cliente"].astype(str).tolist():
-                with st.expander(f"{client}"):
-                    d = details.get(client)
-                    if d is None:
-                        st.write("Sem itens com preço ainda.")
-                        continue
+                st.subheader("Detalhe por cliente")
+                tpl_ver = template_version(intro, total_line_template, outro)
+                for client in summary["Cliente"].astype(str).tolist():
+                    with st.expander(f"{client}"):
+                        d = details.get(client)
+                        if d is None:
+                            st.write("Sem itens com preço ainda.")
+                            continue
 
-                    client_total = float(summary[summary["Cliente"].astype(str) == client]["Total"].iloc[0])
-                    st.markdown(
-                        f"<div class='od-card'><b>Total a pagar</b><div style='font-size:1.25rem; margin-top:4px'>{format_currency(client_total, currency)}</div></div>",
-                        unsafe_allow_html=True,
-                    )
+                        client_total = float(summary[summary["Cliente"].astype(str) == client]["Total"].iloc[0])
+                        st.markdown(
+                            f"<div class='od-card'><b>Total a pagar</b><div style='font-size:1.25rem; margin-top:4px'>{format_currency(client_total, currency)}</div></div>",
+                            unsafe_allow_html=True,
+                        )
 
                     # Action buttons: copy message + open FB inbox
                     client_details = details.get(client)
@@ -1740,16 +1924,16 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
         if tab_messages is not None:
             with tab_messages:
-            st.subheader("Mensagens")
-            by_client2, details2 = build_summary(merged.dropna(subset=["Preco"]))
-            if not details2:
-                priced_rows = int(merged["Preco"].notna().sum()) if "Preco" in merged.columns else 0
-                saved_prices = len(st.session_state.get("price_overrides") or {})
-                st.warning(
-                    f"Sem mensagens ainda porque não há preços aplicados. "
-                    f"(Com preço: {priced_rows} · Preços guardados: {saved_prices})"
-                )
-            totals_map = {str(r["Cliente"]): float(r["Total"]) for _, r in by_client2.iterrows()}
+                st.subheader("Mensagens")
+                by_client2, details2 = build_summary(merged.dropna(subset=["Preco"]))
+                if not details2:
+                    priced_rows = int(merged["Preco"].notna().sum()) if "Preco" in merged.columns else 0
+                    saved_prices = len(st.session_state.get("price_overrides") or {})
+                    st.warning(
+                        f"Sem mensagens ainda porque não há preços aplicados. "
+                        f"(Com preço: {priced_rows} · Preços guardados: {saved_prices})"
+                    )
+                totals_map = {str(r["Cliente"]): float(r["Total"]) for _, r in by_client2.iterrows()}
 
             allow_edit = st.checkbox("Permitir editar mensagem manualmente", value=False)
             client_selected = st.selectbox(
@@ -1962,20 +2146,18 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
         if tab_labels is not None:
             with tab_labels:
-            st.subheader("Etiquetas 10×15 (imprimir)")
-            st.caption("Uma etiqueta por linha de produto: nome, referência+quantidade, preço unitário e (opcional) hora.")
-            if nav == "Etiquetas 10×15":
-                st.info("Dica: nesta página, a tab principal é a **5) Etiquetas 10×15**.")
+                st.subheader("Etiquetas 10×15 (imprimir)")
+                st.caption("Uma etiqueta por linha de produto: nome, referência+quantidade, preço unitário e (opcional) hora.")
 
-            base = merged.dropna(subset=["Preco"]).copy()
-            if base.empty:
-                priced_rows = int(merged["Preco"].notna().sum()) if "Preco" in merged.columns else 0
-                saved_prices = len(st.session_state.get("price_overrides") or {})
-                st.warning(
-                    f"Sem etiquetas porque não há preços aplicados. "
-                    f"(Com preço: {priced_rows} · Preços guardados: {saved_prices})"
-                )
-            has_hora = "Hora" in base.columns
+                base = merged.dropna(subset=["Preco"]).copy()
+                if base.empty:
+                    priced_rows = int(merged["Preco"].notna().sum()) if "Preco" in merged.columns else 0
+                    saved_prices = len(st.session_state.get("price_overrides") or {})
+                    st.warning(
+                        f"Sem etiquetas porque não há preços aplicados. "
+                        f"(Com preço: {priced_rows} · Preços guardados: {saved_prices})"
+                    )
+                has_hora = "Hora" in base.columns
             agg_spec = {"Quantidade": ("Quantidade", "sum"), "Preco": ("Preco", "max")}
             if has_hora:
                 agg_spec["Hora"] = ("Hora", "min")
