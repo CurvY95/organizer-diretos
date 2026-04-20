@@ -2214,10 +2214,10 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 if has_hora:
                     # `Hora` é timestamp do vídeo: aceita `m:ss` e `h:mm:ss` (assume 0h quando faltar).
                     def _parse_hora_to_timedelta(s: str) -> Optional[pd.Timedelta]:
-                        s = str(s or "").strip().replace(" ", "")
+                        s = str(s or "").strip()
                         if not s:
                             return None
-                        parts = [p for p in s.split(":") if p != ""]
+                        parts = s.split(":")
                         try:
                             if len(parts) == 2:  # m:ss
                                 m = int(parts[0])
@@ -2238,16 +2238,6 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         .sort_values(["_HoraSort", "Cliente", "Referência"])
                         .drop(columns=["_HoraSort"])
                     )
-                    with st.expander("Diagnóstico ordenação (Hora)", expanded=False):
-                        try:
-                            demo = labels_df[["Cliente", "Referência", "Hora"]].copy()
-                            demo["_parsed"] = demo["Hora"].map(_parse_hora_to_timedelta)
-                            ok = int(demo["_parsed"].notna().sum())
-                            total = int(demo.shape[0])
-                            st.caption(f"Linhas com Hora parseada: **{ok}/{total}**")
-                            st.dataframe(demo.head(25), width="stretch")
-                        except Exception as e:
-                            st.write(f"Falha diagnóstico: {e}")
                 else:
                     labels_df = labels_df.sort_values(["Cliente", "Referência"])
 
@@ -2275,7 +2265,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         f"""
   <div class="label">
     <div class="client">{b['cliente']}</div>
-    <div class="line">{b['referencia']} — {b['quantidade']} / m</div>
+    <div class="line">{b['referencia']} — {b['quantidade']}</div>
     <div class="price">{b['preco_unit']}</div>
   </div>
 """
@@ -2317,32 +2307,6 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
             blocks: list[dict] = []
             chosen_rows = edited_labels[edited_labels["Imprimir"].fillna(False)].copy()
-            # Ordem de impressão: sempre por Hora (timestamp), quando existir
-            if "Hora" in chosen_rows.columns:
-                def _parse_hora_to_seconds(s: str) -> Optional[int]:
-                    s = str(s or "").strip().replace(" ", "")
-                    if not s:
-                        return None
-                    parts = [p for p in s.split(":") if p != ""]
-                    try:
-                        if len(parts) == 2:  # m:ss
-                            m = int(parts[0])
-                            sec = int(parts[1])
-                            return m * 60 + sec
-                        if len(parts) == 3:  # h:mm:ss
-                            h = int(parts[0])
-                            m = int(parts[1])
-                            sec = int(parts[2])
-                            return h * 3600 + m * 60 + sec
-                    except Exception:
-                        return None
-                    return None
-
-                chosen_rows["_HoraSort"] = chosen_rows["Hora"].map(_parse_hora_to_seconds)
-                chosen_rows = chosen_rows.sort_values(
-                    by=["_HoraSort", "Cliente", "Referência"],
-                    na_position="last",
-                ).drop(columns=["_HoraSort"])
             for _, row in chosen_rows.iterrows():
                 blocks.append(
                     {
