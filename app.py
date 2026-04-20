@@ -306,6 +306,46 @@ def _safe_dom_id(prefix: str, *parts: object) -> str:
     return f"{clean_prefix}_{digest}"
 
 
+def _component_button_css() -> str:
+    return """
+<style>
+:root { color-scheme: light; }
+button.od-copy-btn {
+  width: 100%;
+  min-height: 40px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #b8c0bc;
+  background: #ffffff;
+  color: #111312;
+  cursor: pointer;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+button.od-copy-btn:hover,
+button.od-copy-btn:focus {
+  background: #f7faf8;
+  color: #111312;
+  border-color: #16803c;
+  outline: 3px solid rgba(22, 128, 60, 0.14);
+}
+button.od-copy-btn:active {
+  background: #16803c;
+  color: #ffffff;
+  border-color: #16803c;
+}
+.od-copy-status {
+  margin-top: 6px;
+  font-size: 0.9rem;
+  color: #4b5563;
+  min-height: 18px;
+}
+</style>
+"""
+
+
 def _section(title: str, subtitle: str = "") -> None:
     st.markdown(
         f"""
@@ -784,7 +824,9 @@ ___BRAND_VARS___
   }
   div.stButton > button[data-testid="baseButton-primary"],
   div.stButton > button[data-testid="stBaseButton-primary"],
+  div.stButton > button[data-testid*="primary"],
   button[data-testid="stBaseButton-primary"],
+  button[data-testid*="primary"],
   button[kind="primary"] {
     background: var(--od-success) !important;
     color: #ffffff !important;
@@ -794,7 +836,9 @@ ___BRAND_VARS___
   }
   div.stButton > button[data-testid="baseButton-primary"] *,
   div.stButton > button[data-testid="stBaseButton-primary"] *,
+  div.stButton > button[data-testid*="primary"] *,
   button[data-testid="stBaseButton-primary"] *,
+  button[data-testid*="primary"] *,
   button[kind="primary"] * {
     color: #ffffff !important;
   }
@@ -802,8 +846,12 @@ ___BRAND_VARS___
   div.stButton > button[data-testid="baseButton-primary"]:focus,
   div.stButton > button[data-testid="stBaseButton-primary"]:hover,
   div.stButton > button[data-testid="stBaseButton-primary"]:focus,
+  div.stButton > button[data-testid*="primary"]:hover,
+  div.stButton > button[data-testid*="primary"]:focus,
   button[data-testid="stBaseButton-primary"]:hover,
   button[data-testid="stBaseButton-primary"]:focus,
+  button[data-testid*="primary"]:hover,
+  button[data-testid*="primary"]:focus,
   button[kind="primary"]:hover,
   button[kind="primary"]:focus {
     background: #11652f !important;
@@ -814,7 +862,9 @@ ___BRAND_VARS___
   }
   div.stButton > button[data-testid="baseButton-primary"]:active,
   div.stButton > button[data-testid="stBaseButton-primary"]:active,
+  div.stButton > button[data-testid*="primary"]:active,
   button[data-testid="stBaseButton-primary"]:active,
+  button[data-testid*="primary"]:active,
   button[kind="primary"]:active {
     background: #0d4f25 !important;
     color: #ffffff !important;
@@ -822,6 +872,8 @@ ___BRAND_VARS___
   }
   div.stButton > button:disabled, div.stDownloadButton > button:disabled,
   div.stButton > button[disabled], div.stDownloadButton > button[disabled],
+  a[data-testid="stLinkButton"][aria-disabled="true"],
+  a[data-testid="stLinkButton"][disabled],
   button[data-testid^="stBaseButton"]:disabled,
   button[data-testid^="stBaseButton"][disabled] {
     background: #eef1ef !important;
@@ -832,6 +884,8 @@ ___BRAND_VARS___
   }
   div.stButton > button:disabled *, div.stDownloadButton > button:disabled *,
   div.stButton > button[disabled] *, div.stDownloadButton > button[disabled] *,
+  a[data-testid="stLinkButton"][aria-disabled="true"] *,
+  a[data-testid="stLinkButton"][disabled] *,
   button[data-testid^="stBaseButton"]:disabled *,
   button[data-testid^="stBaseButton"][disabled] * {
     color: #8a938e !important;
@@ -2133,11 +2187,12 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     with a1:
                         st.components.v1.html(
                             f"""
+{_component_button_css()}
 <div>
-  <button id="copy_{btn_key_base}" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #b8c0bc; background:#ffffff; color:#111312; cursor:pointer;">
+  <button type="button" class="od-copy-btn" id="copy_{btn_key_base}">
     COPIAR MENSAGEM
   </button>
-  <div id="copystatus_{btn_key_base}" style="margin-top:6px; font-size:0.9rem; opacity:0.85;"></div>
+  <div class="od-copy-status" id="copystatus_{btn_key_base}"></div>
 </div>
 <script>
 (function() {{
@@ -2198,11 +2253,12 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         if chat_url:
                             st.components.v1.html(
                                 f"""
+{_component_button_css()}
 <div>
-  <button id="copyopen_{btn_key_base}" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #b8c0bc; background:#ffffff; color:#111312; cursor:pointer;">
+  <button type="button" class="od-copy-btn" id="copyopen_{btn_key_base}">
     COPIAR + ABRIR CHAT
   </button>
-  <div id="copyopenstatus_{btn_key_base}" style="margin-top:6px; font-size:0.9rem; opacity:0.85;"></div>
+  <div class="od-copy-status" id="copyopenstatus_{btn_key_base}"></div>
 </div>
 <script>
 (function() {{
@@ -2329,11 +2385,12 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
             with m1:
                 st.components.v1.html(
                     f"""
+{_component_button_css()}
 <div>
-  <button id="copy_msgtab_{msg_btn_key_base}" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #b8c0bc; background:#ffffff; color:#111312; cursor:pointer;">
+  <button type="button" class="od-copy-btn" id="copy_msgtab_{msg_btn_key_base}">
     COPIAR MENSAGEM
   </button>
-  <div id="copystatus_msgtab_{msg_btn_key_base}" style="margin-top:6px; font-size:0.9rem; opacity:0.85;"></div>
+  <div class="od-copy-status" id="copystatus_msgtab_{msg_btn_key_base}"></div>
 </div>
 <script>
 (function() {{
@@ -2394,11 +2451,12 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 if chat_url:
                     st.components.v1.html(
                         f"""
+{_component_button_css()}
 <div>
-  <button id="copyopen_msgtab_{msg_btn_key_base}" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #b8c0bc; background:#ffffff; color:#111312; cursor:pointer;">
+  <button type="button" class="od-copy-btn" id="copyopen_msgtab_{msg_btn_key_base}">
     COPIAR + ABRIR CHAT
   </button>
-  <div id="copyopenstatus_msgtab_{msg_btn_key_base}" style="margin-top:6px; font-size:0.9rem; opacity:0.85;"></div>
+  <div class="od-copy-status" id="copyopenstatus_msgtab_{msg_btn_key_base}"></div>
 </div>
 <script>
 (function() {{
