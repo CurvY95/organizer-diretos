@@ -1,7 +1,9 @@
 import base64
+import hashlib
 import html
 import io
 import json
+import logging
 import os
 import re
 from typing import Optional
@@ -12,9 +14,12 @@ import streamlit as st
 from organizer import core as oc
 from organizer import db as odb
 from organizer import facebook as ofb
+from organizer import labels as ol
 from organizer import storage_local as osl
 from organizer import sessions_json as osj
 from organizer import utils as ou
+
+logger = logging.getLogger(__name__)
 
 
 ORDERS_ALIASES = oc.ORDERS_ALIASES
@@ -256,6 +261,13 @@ def _merge_ids_fill_missing(
             if not (cur.get("profile_id") or "").strip() and (ids.get("profile_id") or "").strip():
                 cur["profile_id"] = str(ids.get("profile_id") or "").strip()
     return out
+
+
+def _safe_dom_id(prefix: str, *parts: object) -> str:
+    raw = "|".join(str(p or "") for p in parts)
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+    clean_prefix = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(prefix or "id")).strip("_") or "id"
+    return f"{clean_prefix}_{digest}"
 
 
 def _merged_session_rows() -> list[dict]:
@@ -945,7 +957,7 @@ elif nav == "Histórico":
                         st.error("Sessão vazia ou não encontrada.")
                     else:
                         st.session_state["loaded_session"] = data
-                        st.success("Sessão carregada. Vá a **Trabalho atual**.")
+                        st.success("Sessão carregada. Vá a **Operação**.")
                 except Exception as e:
                     st.error(f"Falha ao abrir: {e}")
         with c2:
@@ -978,13 +990,28 @@ else:
         if "price_overrides" not in st.session_state or not st.session_state.get("price_overrides"):
             st.session_state["price_overrides"] = loaded.get("price_overrides") or {}
     else:
+        st.session_state.setdefault("uploaded_input_cache", None)
+        cached = st.session_state.get("uploaded_input_cache") or None
+
+        if cached:
+            c1, c2 = st.columns([3, 1], vertical_alignment="bottom")
+            with c1:
+                st.caption(f"Ficheiro em memória: `{cached.get('name','')}`")
+            with c2:
+                if st.button("Limpar / Trocar ficheiro", type="secondary", width="stretch"):
+                    st.session_state["uploaded_input_cache"] = None
+                    st.rerun()
+
         uploaded = st.file_uploader(
             "Upload do ficheiro (.xlsx ou .csv)",
             type=["xlsx", "csv"],
             help="O Excel deve conter a aba `Comments` (ou semelhante). O CSV deve ter colunas como Cliente/Nome, Referência/Produto, Quantidade (e opcionalmente user_id).",
+            key="orders_main_uploader",
         )
         if uploaded is not None:
             try:
+                # Cache bytes so reruns / navigation don't lose the file (Streamlit Cloud behavior)
+                st.session_state["uploaded_input_cache"] = {"name": uploaded.name or "", "bytes": uploaded.getvalue()}
                 name = (uploaded.name or "").lower()
                 if name.endswith(".csv"):
                     # Tampermonkey export uses ';' delimiter and often includes UTF-8 BOM.
@@ -1019,7 +1046,8 @@ else:
                     if prices_sheet and prices_sheet != "(nenhuma)":
                         try:
                             prices_df = pd.read_excel(excel, sheet_name=prices_sheet)
-                        except Exception:
+                        except Exception as e:
+                            logger.warning("Falha ao ler aba de preços do Excel enviado.", exc_info=True)
                             prices_df = pd.DataFrame(columns=["Produto", "Preco"])
                     else:
                         prices_df = pd.DataFrame(columns=["Produto", "Preco"])
@@ -1028,6 +1056,50 @@ else:
                     prices_df = pd.DataFrame(columns=["Produto", "Preco"])
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro: {e}")
+        elif cached and cached.get("bytes"):
+            # Fallback: use cached upload
+            try:
+                name = str(cached.get("name") or "").lower()
+                raw = cached.get("bytes") or b""
+                if name.endswith(".csv"):
+                    sample = raw[:4096].decode("utf-8-sig", errors="ignore")
+                    first_line = (sample.splitlines() or [""])[0]
+                    semicolons = first_line.count(";")
+                    commas = first_line.count(",")
+                    sep = ";" if semicolons > commas else ","
+                    orders_df = _read_csv_bytes_best_effort(raw, sep=sep, force_text=True)
+                    orders_source_label = f"CSV: {cached.get('name')}"
+                    prices_df = pd.DataFrame(columns=["Produto", "Preco"])
+                elif name.endswith(".xlsx"):
+                    excel = pd.ExcelFile(io.BytesIO(raw))
+                    sheet_names = excel.sheet_names
+                    default_orders = _detect_sheet(excel, "orders")
+                    default_prices = _detect_sheet(excel, "prices")
+                    orders_sheet = st.selectbox(
+                        "Aba de comentários / encomendas",
+                        options=sheet_names,
+                        index=sheet_names.index(default_orders) if default_orders in sheet_names else 0,
+                        key="orders_sheet_pick_cached",
+                    )
+                    prices_sheet = st.selectbox(
+                        "Aba de preços (opcional)",
+                        options=["(nenhuma)"] + sheet_names,
+                        index=(1 + sheet_names.index(default_prices)) if default_prices in sheet_names else 0,
+                        help="Se escolher uma aba aqui, os preços do Excel ficam disponíveis para importar automaticamente.",
+                        key="prices_sheet_pick_cached",
+                    )
+                    orders_df = pd.read_excel(excel, sheet_name=orders_sheet, dtype=str)
+                    orders_source_label = f"Excel: {cached.get('name')} / aba: {orders_sheet}"
+                    if prices_sheet and prices_sheet != "(nenhuma)":
+                        try:
+                            prices_df = pd.read_excel(excel, sheet_name=prices_sheet)
+                        except Exception as e:
+                            logger.warning("Falha ao ler aba de preços do Excel em cache.", exc_info=True)
+                            prices_df = pd.DataFrame(columns=["Produto", "Preco"])
+                    else:
+                        prices_df = pd.DataFrame(columns=["Produto", "Preco"])
+            except Exception as e:
+                st.error(f"Erro ao ler o ficheiro (cache): {e}")
 
 if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is not None and prices_df is not None:
     try:
@@ -1315,6 +1387,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         try:
                             bulk = odb.get_customer_ids_bulk(eng, clientes=list(base_ids.keys()))
                         except Exception:
+                            logger.warning("Não foi possível carregar IDs em lote ao guardar sessão.", exc_info=True)
                             bulk = {}
                         merged_ids = _merge_ids_fill_missing(base_ids, local_dir, bulk)
                         sid, payload = save_session(
@@ -1358,8 +1431,9 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                                     out_p = p
                                 local_st2["client_ids"][k] = {"user_id": out_u, "profile_id": out_p}
                             save_local_state(STATE_PATH, local_st2)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning("Não foi possível guardar IDs no estado local.", exc_info=True)
+                            st.warning(f"Sessão guardada, mas não atualizei os IDs no ficheiro local: {e}")
                         st.success(f"Sessão guardada: {sid} (ficheiro local + base de dados, se configurada).")
 
         # Ensure this exists on all pages (Preços/Mensagens/Etiquetas) even if Encomendas page wasn't opened.
@@ -1381,7 +1455,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
             try:
                 client_names_bulk = parsed.orders["Cliente"].dropna().astype(str).str.strip().unique().tolist()
                 st.session_state["_ids_bulk_map"] = odb.get_customer_ids_bulk(eng_ids, clientes=list(client_names_bulk))
-            except Exception:
+            except Exception as e:
+                logger.warning("Não foi possível carregar IDs em lote da base de dados.", exc_info=True)
                 st.session_state["_ids_bulk_map"] = {}
         saved_by_fp = (local.get("by_orders_fp") or {}).get(parsed_orders_fp) or {}
         # Nota: preços podem mudar de direto para direto. Não reutilizamos automaticamente preços
@@ -1413,8 +1488,10 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
                 if excel_map:
                     st.session_state["excel_prices_map"] = excel_map
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Falha ao preparar preços detetados no Excel.", exc_info=True)
+            if tab_prices is not None:
+                st.warning(f"Não consegui preparar os preços do Excel: {e}")
 
         if tab_prices is not None:
             with tab_prices:
@@ -1756,7 +1833,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 local["client_ids"] = local_dir
                 save_local_state(STATE_PATH, local)
         except Exception:
-            pass
+            logger.warning("Não foi possível aprender IDs locais a partir do ficheiro.", exc_info=True)
 
         if tab_summary is not None:
             with tab_summary:
@@ -1810,6 +1887,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         currency=currency,
                         intro=intro,
                         outro=outro,
+                        total_line_template=total_line_template,
                     )
                     ids = client_ids_map.get(client, {})
                     user_id = ids.get("user_id", "")
@@ -1822,7 +1900,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
                     st.markdown("<div class='od-muted' style='margin-top:8px'><b>Ações</b></div>", unsafe_allow_html=True)
                     a1, a2, a3, a4, a5 = st.columns([1.2, 1.1, 1.1, 1.5, 1.8])
-                    btn_key_base = f"{client}_{tpl_ver}"
+                    btn_key_base = _safe_dom_id("summary_client", client, tpl_ver)
                     with a1:
                         st.components.v1.html(
                             f"""
@@ -1969,6 +2047,9 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     )
                 totals_map = {str(r["Cliente"]): float(r["Total"]) for _, r in by_client2.iterrows()}
 
+            if not details2:
+                st.stop()
+
             allow_edit = st.checkbox("Permitir editar mensagem manualmente", value=False)
             client_selected = st.selectbox(
                 "Escolha um cliente",
@@ -1981,6 +2062,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 currency=currency,
                 intro=intro,
                 outro=outro,
+                total_line_template=total_line_template,
             )
             tpl_ver = template_version(intro, total_line_template, outro)
             if allow_edit:
@@ -2014,7 +2096,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
             st.markdown("<div class='od-muted' style='margin-top:8px'><b>Ações</b></div>", unsafe_allow_html=True)
             m1, m2, m3, m4 = st.columns([1.2, 1.1, 1.1, 1.5])
-            msg_btn_key_base = f"msgtab_{client_selected}_{tpl_ver}"
+            msg_btn_key_base = _safe_dom_id("msgtab", client_selected, tpl_ver)
             with m1:
                 st.components.v1.html(
                     f"""
@@ -2141,8 +2223,9 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         local2.setdefault("client_ids", {})
                         local2["client_ids"][str(client_selected).strip()] = {"user_id": nu, "profile_id": np}
                         save_local_state(STATE_PATH, local2)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("Não foi possível guardar IDs no estado local.", exc_info=True)
+                        st.warning(f"Não gravei os IDs no ficheiro local: {e}")
                     try:
                         odb.upsert_customer_ids(
                             _db_engine(),
@@ -2167,6 +2250,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         currency=currency,
                         intro=intro,
                         outro=outro,
+                        total_line_template=total_line_template,
                     )
                 )
             final_text = "\n".join(text_blocks).strip() + "\n"
@@ -2191,9 +2275,11 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         f"Sem etiquetas porque não há preços aplicados. "
                         f"(Com preço: {priced_rows} · Preços guardados: {saved_prices})"
                     )
-                # `Hora` é sempre o timestamp do vídeo (m:ss ou h:mm:ss). Usamos para ordenar, não imprime.
+                # `Hora` é timestamp do vídeo (m:ss ou h:mm:ss). Usamos para ordenar, não imprime.
                 has_hora = "Hora" in base.columns
-                agg_spec = {"Quantidade": ("Quantidade", "sum"), "Preco": ("Preco", "max"), "Hora": ("Hora", "min")}
+                agg_spec = {"Quantidade": ("Quantidade", "sum"), "Preco": ("Preco", "max")}
+                if has_hora:
+                    agg_spec["Hora"] = ("Hora", "min")
 
                 labels_df = (
                     base.groupby(["Cliente", "Produto"], as_index=False)
@@ -2209,38 +2295,23 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     key="labels_pick_mode",
                 )
                 # Ordenação (na tabela e na impressão)
-                def _parse_hora_to_timedelta(s: str) -> Optional[pd.Timedelta]:
-                    s = str(s or "").strip().replace(" ", "")
-                    if not s:
-                        return None
-                    parts = [p for p in s.split(":") if p != ""]
-                    try:
-                        if len(parts) == 2:  # m:ss
-                            m = int(parts[0])
-                            sec = int(parts[1])
-                            return pd.to_timedelta(m * 60 + sec, unit="s")
-                        if len(parts) == 3:  # h:mm:ss
-                            h = int(parts[0])
-                            m = int(parts[1])
-                            sec = int(parts[2])
-                            return pd.to_timedelta(h * 3600 + m * 60 + sec, unit="s")
-                    except Exception:
-                        return None
-                    return None
 
                 order = st.selectbox(
                     "Ordenar por",
-                    options=["Hora (↑)", "Hora (↓)", "Nome (A→Z)"],
+                    options=(["Hora (↑)", "Hora (↓)", "Nome (A→Z)"] if ("Hora" in labels_df.columns) else ["Nome (A→Z)"]),
                     index=0,
                     key="labels_order",
                     help="Hora é o timestamp do vídeo (m:ss ou h:mm:ss). Não aparece impresso.",
                 )
 
-                # Sempre calcula Ordem para veres na tabela
-                dt = labels_df["Hora"].map(_parse_hora_to_timedelta) if "Hora" in labels_df.columns else pd.Series([None] * len(labels_df))
-                labels_df["Ordem"] = dt.map(lambda x: (int(x.total_seconds()) if pd.notna(x) else None))
+                # Sempre calcula Ordem (se existir Hora) para veres na tabela
+                if "Hora" in labels_df.columns:
+                    dt = labels_df["Hora"].map(ol.parse_hora_to_seconds)
+                    labels_df["Ordem"] = dt
+                else:
+                    dt = None
 
-                if order.startswith("Hora"):
+                if order.startswith("Hora") and ("Hora" in labels_df.columns) and (dt is not None):
                     asc = "↑" in order
                     labels_df = (
                         labels_df.assign(_HoraSort=dt)
@@ -2259,93 +2330,32 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 if mode == "Selecionar (uma/várias)":
                     labels_df["Imprimir"] = False
 
+                # Ensure table shows Hora/Ordem when available
+                col_cfg = {
+                    "Imprimir": st.column_config.CheckboxColumn("Imprimir"),
+                    "Cliente": st.column_config.TextColumn("Cliente", disabled=True),
+                    "Referência": st.column_config.TextColumn("Referência", disabled=True),
+                    "Quantidade": st.column_config.NumberColumn("Qtd", disabled=True, format="%.3g"),
+                    "Preco": st.column_config.NumberColumn("Preço unit.", disabled=True, format="%.2f"),
+                }
+                if "Hora" in labels_df.columns:
+                    col_cfg["Hora"] = st.column_config.TextColumn("Hora (timestamp)", disabled=True)
+                if "Ordem" in labels_df.columns:
+                    col_cfg["Ordem"] = st.column_config.NumberColumn("Ordem", disabled=True, format="%d")
+
                 edited_labels = st.data_editor(
                     labels_df,
                     width="stretch",
                     num_rows="fixed",
-                    column_config={
-                        "Imprimir": st.column_config.CheckboxColumn("Imprimir"),
-                        "Cliente": st.column_config.TextColumn("Cliente", disabled=True),
-                        "Referência": st.column_config.TextColumn("Referência", disabled=True),
-                        "Quantidade": st.column_config.NumberColumn("Qtd", disabled=True, format="%.3g"),
-                        "Preco": st.column_config.NumberColumn("Preço unit.", disabled=True, format="%.2f"),
-                        "Hora": st.column_config.TextColumn("Hora (timestamp)", disabled=True),
-                        "Ordem": st.column_config.NumberColumn("Ordem", disabled=True, format="%d"),
-                    },
+                    column_config=col_cfg,
                     key="labels_editor",
                 )
-
-            def labels_html(blocks: list[dict]) -> str:
-                parts = []
-                for b in blocks:
-                    parts.append(
-                        f"""
-  <div class="label">
-    <div class="client">{b['cliente']}</div>
-    <div class="line">{b['referencia']} — {b['quantidade']} / m</div>
-    <div class="price">{b['preco_unit']}</div>
-  </div>
-"""
-                    )
-                body = "\n".join(parts) if parts else "<div style='opacity:.75;font-family:Arial'>Sem etiquetas para imprimir.</div>"
-                return f"""<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Etiquetas 10x15</title>
-  <style>
-    @page {{ size: 100mm 150mm; margin: 6mm; }}
-    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }}
-    .label {{
-      width: 100mm;
-      height: 150mm;
-      box-sizing: border-box;
-      page-break-after: always;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      padding: 6mm;
-      border: 1px solid rgba(0,0,0,0.12);
-      border-radius: 6mm;
-    }}
-    .client {{ font-size: 20pt; font-weight: 800; line-height: 1.05; }}
-    .line {{ font-size: 16pt; font-weight: 650; margin-top: 8mm; }}
-    .price {{ font-size: 26pt; font-weight: 900; }}
-    @media print {{
-      body {{ margin: 0; }}
-      .label {{ border: none; border-radius: 0; }}
-    }}
-  </style>
-</head>
-<body>
-{body}
-</body>
-</html>"""
 
             blocks: list[dict] = []
             chosen_rows = edited_labels[edited_labels["Imprimir"].fillna(False)].copy()
             order = str(st.session_state.get("labels_order") or "")
             if ("Hora" in chosen_rows.columns) and order.startswith("Hora"):
-                def _parse_hora_to_seconds(s: str) -> Optional[int]:
-                    s = str(s or "").strip().replace(" ", "")
-                    if not s:
-                        return None
-                    parts = [p for p in s.split(":") if p != ""]
-                    try:
-                        if len(parts) == 2:  # m:ss
-                            m = int(parts[0])
-                            sec = int(parts[1])
-                            return m * 60 + sec
-                        if len(parts) == 3:  # h:mm:ss
-                            h = int(parts[0])
-                            m = int(parts[1])
-                            sec = int(parts[2])
-                            return h * 3600 + m * 60 + sec
-                    except Exception:
-                        return None
-                    return None
-
-                chosen_rows["_HoraSort"] = chosen_rows["Hora"].map(_parse_hora_to_seconds)
+                chosen_rows["_HoraSort"] = chosen_rows["Hora"].map(ol.parse_hora_to_seconds)
                 asc = "↑" in order
                 chosen_rows = chosen_rows.sort_values(
                     by=["_HoraSort", "Cliente", "Referência"],
@@ -2364,7 +2374,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     }
                 )
 
-            html = labels_html(blocks)
+            html = ol.build_labels_html(blocks)
             st.download_button(
                 "Download etiquetas (HTML)",
                 data=html.encode("utf-8"),
@@ -2442,4 +2452,6 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 )
 
     except Exception as e:
+        if e.__class__.__name__ in {"StopException", "RerunException"}:
+            raise
         st.error(str(e))

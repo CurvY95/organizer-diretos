@@ -1,0 +1,19 @@
+[project]
+name = "organizer-diretos"
+version = "0.1.0"
+description = "Streamlit app para gerir encomendas de vendas em direto."
+requires-python = ">=3.10"
+dependencies = [
+  "pandas>=2.3,<3",
+  "openpyxl>=3.1,<4",
+  "streamlit>=1.50,<2",
+  "sqlalchemy>=2.0,<3",
+  "psycopg2-binary>=2.9,<3",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

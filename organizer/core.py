@@ -292,6 +292,7 @@ def build_message(
     currency: str,
     intro: str,
     outro: str,
+    total_line_template: str = "Total: {total}",
 ) -> str:
     lines: list[str] = []
     if intro.strip():
@@ -305,7 +306,9 @@ def build_message(
         lines.append(
             f"- {row['Produto']} — {q_str} x {format_currency(float(p), currency)} = {format_currency(float(t), currency)}"
         )
-    lines.append(f"Total: {format_currency(float(total), currency)}")
+    total_line = str(total_line_template or "Total: {total}").replace("{total}", format_currency(float(total), currency))
+    if total_line.strip():
+        lines.append(total_line.strip())
     if outro.strip():
         lines.append(outro.strip())
     return "\n".join(lines).strip() + "\n"
@@ -320,4 +323,3 @@ def stable_orders_fingerprint(orders: pd.DataFrame) -> str:
     df = df.sort_values(cols).reset_index(drop=True)
     payload = df.to_csv(index=False).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()[:16]
-

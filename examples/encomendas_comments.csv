@@ -1,0 +1,4 @@
+Cliente,UserId,ProfileId,Hora,Produto,Quantidade,Comentario
+Ana Silva,100000000001,ana.silva,1:05,REF 1,2,"Quero REF 1"
+Ana Silva,100000000001,ana.silva,2:10,REF 2,"1,5","Tambem REF 2"
+Bruno Costa,,bruno.costa,10:02,REF 1,1,"REF 1 para mim"
