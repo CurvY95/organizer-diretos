@@ -1,4 +1,5 @@
-# Tema comercial (B2B / SaaS) — alinhado com o CSS em app.py
+# Tema comercial (B2B / SaaS). A cor de destaque em runtime pode ser sobrescrita por
+# st.secrets / env: BRAND_PRIMARY (ex.: #7c3aed). Coloca o logo em assets/logo.png ou BRAND_LOGO_PATH.
 [theme]
 base = "dark"
 primaryColor = "#22d3ee"

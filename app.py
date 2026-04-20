@@ -1,3 +1,5 @@
+import base64
+import html
 import io
 import json
 import os
@@ -106,9 +108,11 @@ def require_login() -> None:
         return
 
     with st.sidebar:
+        _logo_lg = _brand_logo_img_html()
         st.markdown(
-            """
+            f"""
 <div class="od-nav">
+  {_logo_lg}
   <div class="od-nav-title">Diretos <span style="opacity:0.55;font-weight:700">Pro</span></div>
   <div class="od-nav-sub od-muted">Acesso reservado ao painel</div>
 </div>
@@ -128,11 +132,14 @@ def require_login() -> None:
                 st.error("Credenciais inválidas.")
 
     _, mid, _ = st.columns([1, 2.2, 1])
+    _bn_login = html.escape(_brand_display_name())
+    _lg_login = _brand_logo_img_html()
     with mid:
         st.markdown(
-            """
+            f"""
 <div class="od-hero" style="margin-top:1rem">
-  <div class="od-hero-kicker">Organizer <span class="od-badge">Pro</span></div>
+  {_lg_login}
+  <div class="od-hero-kicker">{_bn_login} <span class="od-badge">Pro</span></div>
   <div class="od-hero-title">Fecha o teu direto com precisão</div>
   <div class="od-hero-sub od-muted">Preços, mensagens por cliente, etiquetas e histórico — num único fluxo comercial. Utiliza o login à esquerda para continuar.</div>
 </div>
@@ -242,29 +249,134 @@ def _merged_session_rows() -> list[dict]:
     return rows
 
 
-st.set_page_config(page_title="Diretos Pro — Organizer", layout="wide", page_icon="✦")
+def _secrets_safe_get(key: str, default: str = "") -> str:
+    try:
+        secrets = getattr(st, "secrets", {}) or {}
+        _ = len(secrets) if hasattr(secrets, "__len__") else 0
+    except Exception:
+        secrets = {}
+    if hasattr(secrets, "get"):
+        return str(secrets.get(key) or default).strip()
+    return default
 
-st.markdown(
-    """
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+
+def _brand_primary_hex() -> str:
+    h = _secrets_safe_get("BRAND_PRIMARY") or str(os.getenv("BRAND_PRIMARY") or "").strip() or "#22d3ee"
+    h = h.strip()
+    if not h.startswith("#"):
+        h = "#" + h
+    if len(h) not in (4, 7):
+        return "#22d3ee"
+    return h
+
+
+def _hex_to_rgb_tuple(h: str) -> tuple[int, int, int]:
+    hx = h.strip().lstrip("#")
+    if len(hx) == 3:
+        hx = "".join(c * 2 for c in hx)
+    if len(hx) != 6:
+        return (34, 211, 238)
+    try:
+        return int(hx[0:2], 16), int(hx[2:4], 16), int(hx[4:6], 16)
+    except ValueError:
+        return (34, 211, 238)
+
+
+def _hex_darken(h: str, factor: float = 0.52) -> str:
+    r, g, b = _hex_to_rgb_tuple(h)
+    r = max(0, min(255, int(r * factor)))
+    g = max(0, min(255, int(g * factor)))
+    b = max(0, min(255, int(b * factor)))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _brand_css_variables_block() -> str:
+    hex_c = _brand_primary_hex()
+    r, g, b = _hex_to_rgb_tuple(hex_c)
+    deep = _hex_darken(hex_c, 0.5)
+    return (
+        f"  --od-accent: {hex_c};\n"
+        f"  --od-accent-deep: {deep};\n"
+        f"  --od-accent-rgb: {r},{g},{b};\n"
+        f"  --od-accent-dim: rgba({r},{g},{b},0.12);\n"
+        f"  --od-accent-border: rgba({r},{g},{b},0.35);\n"
+        f"  --od-glow: rgba({r},{g},{b},0.35);\n"
+        f"  --od-tab-active: rgba({r},{g},{b},0.14);\n"
+        f"  --od-hover-ring: rgba({r},{g},{b},0.45);\n"
+        f"  --od-hover-shadow: rgba({r},{g},{b},0.12);\n"
+        f"  --od-radial-hero: rgba({r},{g},{b},0.08);\n"
+    )
+
+
+def _brand_logo_data_uri() -> Optional[str]:
+    path_env = str(os.getenv("BRAND_LOGO_PATH") or "").strip()
+    path_secret = _secrets_safe_get("BRAND_LOGO_PATH")
+    candidates = [
+        p for p in (path_secret, path_env, os.path.join(os.getcwd(), "assets", "logo.png"), os.path.join(os.getcwd(), "assets", "logo.svg"))
+        if p and str(p).strip()
+    ]
+    for p in candidates:
+        try:
+            if os.path.isfile(p):
+                ext = os.path.splitext(p)[1].lower()
+                mime = "image/svg+xml" if ext == ".svg" else "image/jpeg" if ext in (".jpg", ".jpeg") else "image/png"
+                with open(p, "rb") as f:
+                    b64 = base64.b64encode(f.read()).decode("ascii")
+                return f"data:{mime};base64,{b64}"
+        except OSError:
+            continue
+    return None
+
+
+def _brand_logo_img_html(extra_class: str = "") -> str:
+    uri = _brand_logo_data_uri()
+    if not uri:
+        return ""
+    cls = ("od-brand-logo " + extra_class).strip()
+    return f'<img class="{cls}" src="{uri}" alt="Logo" />'
+
+
+def _brand_display_name() -> str:
+    return _secrets_safe_get("BRAND_NAME") or "Organizer Diretos"
+
+
+def _brand_tagline() -> str:
+    return _secrets_safe_get("BRAND_TAGLINE") or "Operação comercial pós-live"
+
+
+def _brand_page_title() -> str:
+    name = _brand_display_name()
+    return f"{name} · Diretos Pro"
+
+
+st.set_page_config(page_title=_brand_page_title(), layout="wide", page_icon="✦")
+
+_brand_vars = _brand_css_variables_block()
+_OD_COMMERCIAL_CSS = """
 <style>
   :root {
-    --od-font: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-    --od-accent: #22d3ee;
-    --od-accent-dim: rgba(34, 211, 238, 0.12);
+___BRAND_VARS___
+    --od-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --od-line: rgba(148, 163, 184, 0.18);
-    --od-glow: rgba(34, 211, 238, 0.35);
   }
 
   html, body, [class*="css"] { font-family: var(--od-font) !important; }
 
   .stApp {
-    background: radial-gradient(1200px 600px at 10% -10%, rgba(34, 211, 238, 0.08), transparent 55%),
+    background: radial-gradient(1200px 600px at 10% -10%, var(--od-radial-hero), transparent 55%),
                 radial-gradient(900px 500px at 100% 0%, rgba(99, 102, 241, 0.10), transparent 50%),
                 linear-gradient(180deg, #070b12 0%, #0a0f1a 100%) !important;
   }
+
+  .od-brand-logo {
+    max-height: 42px;
+    width: auto;
+    display: block;
+    margin-bottom: 0.55rem;
+    object-fit: contain;
+    border-radius: 10px;
+  }
+  .od-brand-logo.od-hero-logo { max-height: 52px; margin-bottom: 0.65rem; }
 
   .block-container {
     padding-top: 1.25rem;
@@ -315,7 +427,7 @@ st.markdown(
     letter-spacing: 0.06em;
     background: var(--od-accent-dim);
     color: #ecfeff !important;
-    border: 1px solid rgba(34, 211, 238, 0.35);
+    border: 1px solid var(--od-accent-border);
   }
   .od-hero-title {
     font-weight: 800;
@@ -364,12 +476,12 @@ st.markdown(
     transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease !important;
   }
   div.stButton > button:hover, div.stDownloadButton > button:hover, a[data-testid="stLinkButton"]:hover {
-    border-color: rgba(34, 211, 238, 0.45) !important;
-    box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.12) !important;
+    border-color: var(--od-hover-ring) !important;
+    box-shadow: 0 0 0 1px var(--od-hover-shadow) !important;
   }
   div.stButton > button[data-testid="baseButton-primary"],
   button[kind="primary"] {
-    background: linear-gradient(135deg, #0891b2 0%, #06b6d4 45%, #22d3ee 100%) !important;
+    background: linear-gradient(135deg, var(--od-accent-deep) 0%, var(--od-accent) 100%) !important;
     color: #042f2e !important;
     border: none !important;
     font-weight: 700 !important;
@@ -401,7 +513,7 @@ st.markdown(
     padding: 0.45rem 0.85rem !important;
   }
   [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-    background: rgba(34, 211, 238, 0.14) !important;
+    background: var(--od-tab-active) !important;
     color: #ecfeff !important;
   }
 
@@ -441,19 +553,22 @@ st.markdown(
     padding: 0.65rem 0.75rem;
   }
 </style>
-""",
-    unsafe_allow_html=True,
-)
+"""
+
+st.markdown(_OD_COMMERCIAL_CSS.replace("___BRAND_VARS___", _brand_vars), unsafe_allow_html=True)
 
 require_login()
 
 col_a, col_b = st.columns([3, 2], vertical_alignment="bottom")
+_brand_name_h = html.escape(_brand_display_name())
+_brand_logo_h = _brand_logo_img_html("od-hero-logo")
 with col_a:
     st.markdown(
-        """
+        f"""
 <div class="od-hero">
+  {_brand_logo_h}
   <div class="od-hero-kicker">Vendas em direto <span class="od-badge">Pro</span></div>
-  <div class="od-hero-title">Organizer Diretos</div>
+  <div class="od-hero-title">{_brand_name_h}</div>
   <div class="od-hero-sub od-muted">Do export do Tampermonkey ao cliente final: preços, resumos, mensagens e etiquetas — num fluxo único, com histórico e sessões guardadas.</div>
   <div class="od-pill-row">
     <span class="od-pill">Importar Comments</span>
@@ -480,11 +595,14 @@ with col_b:
 STATE_PATH = os.path.join(os.getcwd(), "saved", "organizer_state.json")
 
 with st.sidebar:
+    _logo_sb = _brand_logo_img_html()
+    _tag_sb = html.escape(_brand_tagline())
     st.markdown(
-        """
+        f"""
 <div class="od-nav">
+  {_logo_sb}
   <div class="od-nav-title">Diretos <span style="opacity:0.55;font-weight:700">Pro</span></div>
-  <div class="od-nav-sub od-muted">Operação comercial pós-live</div>
+  <div class="od-nav-sub od-muted">{_tag_sb}</div>
 </div>
 """,
         unsafe_allow_html=True,
