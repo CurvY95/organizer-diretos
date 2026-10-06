@@ -174,45 +174,25 @@ def require_login() -> None:
     if st.session_state.get("authenticated") is True:
         return
 
-    with st.sidebar:
-        _logo_lg = _brand_logo_img_html()
+    _, mid, _ = st.columns([1, 1.4, 1])
+    with mid:
         st.markdown(
-            f"""
-<div class="od-nav">
-{_logo_lg}
-<div class="od-nav-title">Diretos <span style="opacity:0.55;font-weight:700">Pro</span></div>
-<div class="od-nav-sub od-muted">Acesso reservado ao painel</div>
-</div>
-""",
+            f'<div class="od-hero"><div class="od-hero-kicker">{html.escape(_brand_display_name())}</div>'
+            '<div class="od-hero-title">Vamos organizar o teu direto.</div>'
+            '<p class="od-muted">Encomendas, preços e envios, passo a passo.</p></div>',
             unsafe_allow_html=True,
         )
-        st.markdown("<div class='od-card-h' style='margin:0.5rem 0 0.35rem'>Credenciais</div>", unsafe_allow_html=True)
-        u = st.text_input("Utilizador", key="auth_user", placeholder="O teu utilizador")
-        p = st.text_input("Password", type="password", key="auth_pass", placeholder="••••••••")
-        do_login = st.button("Entrar no painel", type="primary", width="stretch")
+        with st.form("login_form"):
+            u = st.text_input("Utilizador", key="auth_user", placeholder="O teu utilizador")
+            p = st.text_input("Palavra-passe", type="password", key="auth_pass")
+            do_login = st.form_submit_button("Entrar", type="primary", width="stretch")
         if do_login:
             if u == expected_user and p == expected_pass:
                 st.session_state["authenticated"] = True
                 st.session_state.pop("auth_pass", None)
                 st.rerun()
             else:
-                st.error("Credenciais inválidas.")
-
-    _, mid, _ = st.columns([1, 2.2, 1])
-    _bn_login = html.escape(_brand_display_name())
-    _lg_login = _brand_logo_img_html()
-    with mid:
-        st.markdown(
-            f"""
-<div class="od-hero" style="margin-top:1rem">
-{_lg_login}
-<div class="od-hero-kicker">{_bn_login} <span class="od-badge">Pro</span></div>
-<div class="od-hero-title">Fecha o teu direto com precisão</div>
-<div class="od-hero-sub od-muted">Preços, mensagens por cliente, etiquetas e histórico — num único fluxo comercial. Utiliza o login à esquerda para continuar.</div>
-</div>
-""",
-            unsafe_allow_html=True,
-        )
+                st.error("O utilizador ou a palavra-passe não estão corretos. Tenta novamente.")
     st.stop()
 
 
@@ -423,6 +403,35 @@ def _prices_dirty() -> bool:
 
 def _has_unsaved_changes() -> bool:
     return _orders_dirty() or _prices_dirty() or _pending_comments_dirty()
+
+
+def _request_navigation(destination: str) -> None:
+    committed = st.session_state.get("nav_committed", "Operação")
+    if destination == committed:
+        return
+    if _has_unsaved_changes():
+        st.session_state["nav_pending"] = destination
+        st.session_state["nav_page"] = committed
+        st.session_state["show_unsaved_nav_dialog"] = True
+    else:
+        st.session_state["nav_page"] = destination
+        st.session_state["nav_committed"] = destination
+
+
+def _finish_navigation(save: bool) -> None:
+    if save:
+        _save_all_pending_changes()
+    else:
+        _discard_all_pending_changes()
+    destination = st.session_state.get("nav_pending") or st.session_state.get("nav_committed", "Operação")
+    st.session_state["nav_committed"] = destination
+    st.session_state["nav_page"] = destination
+    _cancel_navigation()
+
+
+def _cancel_navigation() -> None:
+    st.session_state["nav_pending"] = None
+    st.session_state["show_unsaved_nav_dialog"] = False
 
 
 def _apply_pending_comment_removals_to_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -1109,41 +1118,34 @@ ___BRAND_VARS___
     .od-workbench-top { display: block; }
     .od-action-strip { margin-top: 0.75rem; }
   }
+
+  /* Calmer surfaces, clear selection and accessible keyboard focus. */
+  :root { --od-bg: #f5f7fa; --od-line: #e1e7e5; --od-sidebar: #163c32; --od-sidebar-2: #102f27; }
+  .block-container { max-width: 1200px; padding-top: 2rem; }
+  .od-workbench { border: none; background: transparent; box-shadow: none; padding: 0 0 1rem; }
+  .od-hero-title { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 750; }
+  .od-hero, .od-card { border-radius: 16px; padding: 1.5rem; box-shadow: none; }
+  .od-section { background: transparent; border: 0; padding: 1rem 0 0.25rem; margin-bottom: 0.5rem; }
+  .od-section-title { font-size: 1.3rem; }
+  div[data-testid="stMetric"] { border-radius: 14px; padding: 1rem 1.2rem; }
+  [data-testid="stSidebar"] .od-nav { background: transparent; border: 0; padding-left: 0; }
+  [data-testid="stSidebar"] .od-nav-sub,
+  [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p { color: #c2d7ce !important; }
+  [data-testid="stSidebar"] [role="radiogroup"] { gap: 0.4rem; }
+  [data-testid="stSidebar"] [role="radiogroup"] > label { padding: 0.65rem; border-radius: 10px; }
+  [data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) { background: #ffffff20; }
+  button:focus-visible, a:focus-visible { outline: 3px solid #36866b !important; outline-offset: 3px; }
+  [data-testid="stTabs"] button[aria-selected="true"] p { color: white !important; }
+  @media (max-width: 760px) {
+    .block-container { padding: 1rem 1rem 2rem; }
+    .od-hero { padding: 1rem; }
+  }
 </style>
 """
 
 st.markdown(_OD_COMMERCIAL_CSS.replace("___BRAND_VARS___", _brand_vars), unsafe_allow_html=True)
 
 require_login()
-
-_brand_name_h = html.escape(_brand_display_name())
-_brand_logo_h = _brand_logo_img_html("od-hero-logo")
-st.markdown(
-    f"""
-<div class="od-workbench">
-<div class="od-workbench-top">
-<div>
-{_brand_logo_h}
-<div class="od-hero-kicker">Painel comercial <span class="od-badge">Diretos Pro</span></div>
-<div class="od-hero-title">{_brand_name_h}</div>
-<div class="od-hero-sub od-muted">Importa, valida preços, fecha mensagens e prepara etiquetas sem sair do fluxo de venda.</div>
-</div>
-<div class="od-action-strip">
-<span class="od-status">CSV / Excel</span>
-<span class="od-status">Facebook Business</span>
-<span class="od-status">Sessões guardadas</span>
-</div>
-</div>
-<div class="od-stage-row">
-<div class="od-stage"><div class="od-stage-num">01</div><div class="od-stage-title">Encomendas</div><div class="od-stage-sub">importar e limpar</div></div>
-<div class="od-stage"><div class="od-stage-num">02</div><div class="od-stage-title">Preços</div><div class="od-stage-sub">guardar antes de vender</div></div>
-<div class="od-stage"><div class="od-stage-num">03</div><div class="od-stage-title">Mensagens</div><div class="od-stage-sub">copiar e abrir chat</div></div>
-<div class="od-stage"><div class="od-stage-num">04</div><div class="od-stage-title">Etiquetas</div><div class="od-stage-sub">impressão 10x15</div></div>
-</div>
-</div>
-""",
-    unsafe_allow_html=True,
-)
 
 STATE_PATH = os.path.join(os.getcwd(), "saved", "organizer_state.json")
 
@@ -1172,17 +1174,7 @@ with st.sidebar:
     st.session_state.setdefault("nav_committed", st.session_state.get("nav_page", "Operação"))
 
     def _on_nav_change():
-        new_nav = st.session_state.get("nav_page")
-        committed = st.session_state.get("nav_committed")
-        if not new_nav or new_nav == committed:
-            return
-        if _has_unsaved_changes():
-            st.session_state["nav_pending"] = new_nav
-            # revert selection until user decides
-            st.session_state["nav_page"] = committed
-            st.session_state["show_unsaved_nav_dialog"] = True
-        else:
-            st.session_state["nav_committed"] = new_nav
+        _request_navigation(st.session_state.get("nav_page", "Operação"))
 
     nav = st.radio(
         "Navegação",
@@ -1192,17 +1184,17 @@ with st.sidebar:
         key="nav_page",
         on_change=_on_nav_change,
         format_func=lambda k: {
-            "Operação": "01  Operação",
+            "Operação": "01  Encomendas",
             "Preços": "02  Preços",
             "Mensagens": "03  Mensagens",
             "Etiquetas": "04  Etiquetas",
-            "Histórico": "05  Histórico",
-            "Definições": "06  Definições",
+            "Histórico": "Sessões guardadas",
+            "Definições": "Definições",
         }.get(k, k),
     )
 
     nav_desc = {
-        "Operação": "Importa Comments, ajusta encomendas e valida o resumo.",
+        "Operação": "Importa o ficheiro do direto, revê as encomendas e confirma os totais.",
         "Preços": "Importa/edita preços e aplica ao pedido.",
         "Mensagens": "Gera mensagens por cliente e ações (copiar/abrir chat).",
         "Etiquetas": "Gera etiquetas 10×15 para impressão.",
@@ -1219,13 +1211,27 @@ with st.sidebar:
             st.session_state.pop("loaded_session", None)
             st.rerun()
 
-st.divider()
-_section(nav, nav_desc.get(nav, ""))
+st.markdown(
+    f'<div class="od-workbench"><div class="od-hero-kicker">{html.escape(_brand_display_name())}</div>'
+    '<div class="od-hero-title">Do direto à encomenda pronta.</div>'
+    '<div class="od-hero-sub od-muted">Segue as etapas abaixo. Podes voltar atrás sempre que precisares.</div></div>',
+    unsafe_allow_html=True,
+)
+for col, (destination, label) in zip(st.columns(4), [
+    ("Operação", "1 · Encomendas"), ("Preços", "2 · Preços"),
+    ("Mensagens", "3 · Mensagens"), ("Etiquetas", "4 · Etiquetas"),
+]):
+    col.button(label, key=f"step_{destination}", width="stretch",
+               type="primary" if nav == destination else "secondary",
+               on_click=_request_navigation, args=(destination,))
+st.caption("Sessões guardadas e definições disponíveis no menu lateral.")
+_section("Encomendas" if nav == "Operação" else nav, nav_desc.get(nav, ""))
+workflow_status = st.container()
 
 # Unsaved changes modal (navigation guard)
 if bool(st.session_state.get("show_unsaved_nav_dialog")):
 
-    @st.dialog("Alterações não guardadas")
+    @st.dialog("Alterações não guardadas", on_dismiss=_cancel_navigation)
     def _unsaved_dialog():
         dirty_bits: list[str] = []
         if _orders_dirty():
@@ -1238,24 +1244,18 @@ if bool(st.session_state.get("show_unsaved_nav_dialog")):
         st.write(", ".join(dirty_bits) if dirty_bits else "—")
         st.caption("Queres sair desta página sem guardar? Podes guardar agora ou sair sem guardar.")
 
-        c1, c2 = st.columns(2)
+        c1, c2, c3 = st.columns(3)
+        with c3:
+            if st.button("Continuar a editar", width="stretch"):
+                _cancel_navigation()
+                st.rerun()
         with c1:
-            if st.button("Guardar", type="primary", width="stretch"):
-                _save_all_pending_changes()
-                nxt = st.session_state.get("nav_pending") or st.session_state.get("nav_committed")
-                st.session_state["nav_committed"] = nxt
-                st.session_state["nav_page"] = nxt
-                st.session_state["nav_pending"] = None
-                st.session_state["show_unsaved_nav_dialog"] = False
+            if st.button("Guardar e continuar", type="primary", width="stretch",
+                         on_click=_finish_navigation, args=(True,)):
                 st.rerun()
         with c2:
-            if st.button("Sair sem guardar", type="secondary", width="stretch"):
-                _discard_all_pending_changes()
-                nxt = st.session_state.get("nav_pending") or st.session_state.get("nav_committed")
-                st.session_state["nav_committed"] = nxt
-                st.session_state["nav_page"] = nxt
-                st.session_state["nav_pending"] = None
-                st.session_state["show_unsaved_nav_dialog"] = False
+            if st.button("Sair sem guardar", type="secondary", width="stretch",
+                         on_click=_finish_navigation, args=(False,)):
                 st.rerun()
 
     _unsaved_dialog()
@@ -1285,9 +1285,9 @@ if nav == "Definições":
         st.session_state["fill_missing_qty"] = st.checkbox("Se Quantidade estiver vazia, assumir 1", value=fill_missing_qty)
     with c2:
         st.markdown(
-            "<div class='od-card'><div class='od-muted'><b>Dica</b></div><div class='od-small' style='margin-top:6px'>"
-            "No Streamlit Cloud, configura <code>DATABASE_URL</code> (Postgres) em segredos para persistir "
-            "sessões e IDs — só quando clicas <b>Guardar sessão</b> / <b>Aplicar</b>."
+            "<div class='od-card'><div class='od-muted'><b>Mensagens à tua medida</b></div><div class='od-small' style='margin-top:6px'>"
+            "Personaliza a saudação e o fecho abaixo. Usa <code>{total}</code> para inserir "
+            "automaticamente o valor da encomenda de cada cliente."
             "</div></div>",
             unsafe_allow_html=True,
         )
@@ -1374,21 +1374,35 @@ else:
         st.session_state.setdefault("uploaded_input_cache", None)
         cached = st.session_state.get("uploaded_input_cache") or None
 
-        if cached:
-            c1, c2 = st.columns([3, 1], vertical_alignment="bottom")
-            with c1:
-                st.caption(f"Ficheiro em memória: `{cached.get('name','')}`")
-            with c2:
-                if st.button("Limpar / Trocar ficheiro", type="secondary", width="stretch"):
-                    st.session_state["uploaded_input_cache"] = None
-                    st.rerun()
+        if not cached:
+            st.markdown(
+                '<div class="od-hero"><div class="od-hero-kicker">Começa aqui</div>'
+                '<div class="od-hero-title">Importa as encomendas do teu direto</div>'
+                '<p class="od-muted">Escolhe um CSV ou Excel com cliente, referência e quantidade. '
+                'Depois, revê os pedidos e adiciona os preços.</p></div>',
+                unsafe_allow_html=True,
+            )
+            if nav != "Operação":
+                st.info("Para trabalhar nesta etapa, importa primeiro um ficheiro ou abre uma sessão guardada.")
+            empty_left, empty_right = st.columns(2)
+            with empty_left:
+                example_path = os.path.join(os.path.dirname(__file__), "examples", "encomendas_comments.csv")
+                with open(example_path, "rb") as example_file:
+                    st.download_button("Descarregar CSV de exemplo", example_file.read(),
+                                       "exemplo_encomendas.csv", "text/csv", width="stretch")
+            empty_right.button("Abrir uma sessão guardada", on_click=_request_navigation,
+                               args=("Histórico",), width="stretch")
 
-        uploaded = st.file_uploader(
-            "Upload do ficheiro (.xlsx ou .csv)",
-            type=["xlsx", "csv"],
-            help="O Excel deve conter a aba `Comments` (ou semelhante). O CSV deve ter colunas como Cliente/Nome, Referência/Produto, Quantidade (e opcionalmente user_id).",
-            key="orders_main_uploader",
-        )
+        if cached:
+            st.caption(f"Ficheiro atual: {cached.get('name', '')}")
+
+        with st.expander("Importar outro ficheiro" if cached else "Importar CSV ou Excel", expanded=not bool(cached)):
+            uploaded = st.file_uploader(
+                "Escolhe o ficheiro de encomendas",
+                type=["xlsx", "csv"],
+                help="O Excel deve conter a aba `Comments` (ou semelhante). O CSV deve ter colunas como Cliente/Nome, Referência/Produto, Quantidade (e opcionalmente user_id).",
+                key="orders_main_uploader",
+            )
         if uploaded is not None:
             try:
                 # Cache bytes so reruns / navigation don't lose the file (Streamlit Cloud behavior)
@@ -1482,7 +1496,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
         tab_labels = None
 
         if nav == "Operação":
-            tab_comments, tab_upload, tab_summary = st.tabs(["Comentários", "Encomendas", "Resumo"])
+            tab_upload, tab_comments, tab_summary = st.tabs(["Rever encomendas", "Limpar comentários", "Totais por cliente"])
         elif nav == "Preços":
             (tab_prices,) = st.tabs(["Preços"])
         elif nav == "Mensagens":
@@ -2077,13 +2091,13 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
             saved_count = len(st.session_state.get("price_overrides") or {})
             last_saved = st.session_state.get("prices_last_saved_at") or ""
-            st.caption(f"Guardados: **{saved_count}** referência(s)" + (f" · Último save: `{last_saved}`" if last_saved else ""))
+            st.caption(f"Guardados: **{saved_count}** referência(s)" + (f" · Última gravação: `{last_saved}`" if last_saved else ""))
 
             overrides_df = pd.DataFrame(
                 [{"ProdutoKey": k, "Preco": v} for k, v in st.session_state["price_overrides"].items()]
             )
             st.download_button(
-                "Download preços guardados (.csv)",
+                "Descarregar preços guardados (.csv)",
                 data=overrides_df.to_csv(index=False).encode("utf-8"),
                 file_name="precos_inseridos_no_app.csv",
                 mime="text/csv",
@@ -2098,17 +2112,23 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
         total_rows_global = int(merged.shape[0]) if merged is not None else 0
         refs_global = int(merged["ProdutoKey"].nunique()) if "ProdutoKey" in merged.columns else 0
         clients_global = int(parsed.orders["Cliente"].dropna().astype(str).str.strip().nunique()) if "Cliente" in parsed.orders.columns else 0
-        st.markdown(
-            f"""
-<div class="od-kpi-line">
-<span class="od-kpi">Clientes: {clients_global}</span>
-<span class="od-kpi">Linhas: {total_rows_global}</span>
-<span class="od-kpi">Referências: {refs_global}</span>
-<span class="od-kpi">Com preço: {priced_rows_global}/{total_rows_global}</span>
-</div>
-""",
-            unsafe_allow_html=True,
-        )
+        with workflow_status:
+            st.caption(orders_source_label or "Direto atual")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Clientes", clients_global)
+            c2.metric("Referências", refs_global)
+            c3.metric("Linhas com preço", f"{priced_rows_global} / {total_rows_global}")
+            if total_rows_global and priced_rows_global < total_rows_global:
+                st.warning("Há encomendas sem preço. Os totais e as mensagens ainda estão incompletos.")
+                if nav != "Preços":
+                    st.button("Completar preços →", key="next_prices", on_click=_request_navigation, args=("Preços",))
+            elif total_rows_global:
+                st.success("Todas as encomendas têm preço. Já podes conferir os totais e preparar as mensagens.")
+                next_step = {"Operação": ("Preços", "Rever preços →"),
+                             "Preços": ("Mensagens", "Preparar mensagens →"),
+                             "Mensagens": ("Etiquetas", "Preparar etiquetas →")}.get(nav)
+                if next_step:
+                    st.button(next_step[1], key="next_step", on_click=_request_navigation, args=(next_step[0],))
 
         # ID estável reutilizado quando abres uma sessão guardada.
         if "history_session_id" not in st.session_state:
@@ -2119,7 +2139,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
         if not still_missing.empty:
             st.info(
                 f"Ainda faltam preços para {len(still_missing)} referência(s). "
-                "Preencha na aba '2) Preços' para liberar o resumo."
+                "Abre a etapa Preços para completar os valores em falta."
             )
             with st.expander("Diagnóstico preços", expanded=False):
                 try:
@@ -2757,7 +2777,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
             html = ol.build_labels_html(blocks)
             st.download_button(
-                "Download etiquetas (HTML)",
+                "Descarregar etiquetas (HTML)",
                 data=html.encode("utf-8"),
                 file_name="etiquetas_10x15.html",
                 mime="text/html",
@@ -2784,7 +2804,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 c1, c2 = st.columns(2)
                 with c1:
                     st.download_button(
-                        "Download texto (.txt)",
+                        "Descarregar texto (.txt)",
                         data=(final_text.encode("utf-8") if "final_text" in locals() else b""),
                         file_name="mensagens_por_pessoa.txt",
                         mime="text/plain",
@@ -2795,7 +2815,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     else:
                         csv_bytes = b""
                     st.download_button(
-                        "Download resumo (.csv)",
+                        "Descarregar resumo (.csv)",
                         data=csv_bytes,
                         file_name="resumo_por_pessoa.csv",
                         mime="text/csv",
@@ -2826,7 +2846,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 if "profile_id" in export_df.columns:
                     export_df["profile_id"] = export_df["profile_id"].astype(str).str.strip()
                 st.download_button(
-                    "Download encomendas (.csv)",
+                    "Descarregar encomendas (.csv)",
                     data=export_df.to_csv(index=False).encode("utf-8"),
                     file_name="encomendas_comments.csv",
                     mime="text/csv",
