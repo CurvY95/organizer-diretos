@@ -1,4 +1,5 @@
 .venv/
+.venv-next/
 venv/
 ENV/
 
@@ -20,6 +21,7 @@ htmlcov/
 
 # App local data (generated)
 saved/
+artifacts/
 
 # OS / Editor
 .DS_Store
