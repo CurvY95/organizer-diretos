@@ -1,0 +1,322 @@
+"""Run real pages and exports with disposable files and a separate SQLite database."""
+
+import io
+import json
+import os
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import pandas as pd
+import streamlit as st
+from streamlit.testing.v1 import AppTest
+from streamlit.testing.v1.element_tree import ElementTree
+
+from organizer import sessions_json
+from organizer.core import normalize_produto_key
+
+
+ROOT = Path(__file__).resolve().parents[1]
+PRICES = {normalize_produto_key("REF 1"): 3.5, normalize_produto_key("REF 2"): 4.0}
+
+
+class WorkflowTests(unittest.TestCase):
+    def setUp(self):
+        self.previous_cwd = os.getcwd()
+        self.directory = tempfile.TemporaryDirectory(prefix="organizer-workflow-")
+        self.addCleanup(self.directory.cleanup)
+        os.chdir(self.directory.name)
+        self.addCleanup(os.chdir, self.previous_cwd)
+        env = patch.dict(os.environ, {
+            "ORGANIZER_USER": "workflow-test",
+            "ORGANIZER_PASS": "local-test-password",
+            "DATABASE_URL": f"sqlite:///{self.directory.name}/organizer.db",
+        })
+        env.start()
+        self.addCleanup(env.stop)
+        # This module may already be imported by another test before cwd changes.
+        sessions = patch.object(sessions_json, "SESSIONS_DIR", str(Path(self.directory.name) / "saved/sessions"))
+        sessions.start()
+        self.addCleanup(sessions.stop)
+        serialize = ElementTree.get_widget_states
+
+        def include_editor_states(tree):
+            # AppTest represents editors as UnknownElement and omits them from
+            # widget serialization. Preserve their real string_value payload,
+            # as data_editor.DataEditorSerde does for browser interactions.
+            states = serialize(tree)
+            included = {widget.id for widget in states.widgets}
+            for node in tree.get("dataframe"):
+                if node.key in {"comments_editor", "all_prices_editor", "labels_editor"}:
+                    if node.proto.id not in included and node.key in tree.session_state:
+                        widget = states.widgets.add()
+                        widget.id = node.proto.id
+                        widget.string_value = json.dumps(tree.session_state[node.key])
+            return states
+
+        editors = patch.object(ElementTree, "get_widget_states", include_editor_states)
+        editors.start()
+        self.addCleanup(editors.stop)
+
+    def assert_app_ok(self, app):
+        self.assertFalse(app.exception, [item.value for item in app.exception])
+        self.assertFalse(app.error, [item.value for item in app.error])
+
+    def login(self):
+        app = AppTest.from_file(str(ROOT / "app.py"), default_timeout=20).run()
+        app.text_input(key="auth_user").set_value("workflow-test")
+        app.text_input(key="auth_pass").set_value("local-test-password")
+        app.button[0].click().run()
+        self.assert_app_ok(app)
+        return app
+
+    def import_orders(self, app):
+        app.session_state["uploaded_input_cache"] = {
+            "name": "encomendas_comments.csv",
+            "bytes": (ROOT / "examples/encomendas_comments.csv").read_bytes(),
+        }
+        app.run()
+        self.assert_app_ok(app)
+
+    def click(self, app, label):
+        next(button for button in app.button if button.label == label).click().run()
+        self.assert_app_ok(app)
+
+    def edit_cells(self, app, key, rows):
+        # AppTest has no data_editor interaction API. Feed its actual widget
+        # patch format and rerun, as committing a cell does in the browser.
+        app.session_state[key] = {"edited_rows": rows, "added_rows": [], "deleted_rows": []}
+        app.run()
+        self.assert_app_ok(app)
+
+    def save_prices(self, app):
+        app.button(key="step_Preços").click().run()
+        self.assertEqual(app.session_state["nav_committed"], "Preços")
+        rows = {
+            index: {"Preco": PRICES[row["ProdutoKey"]]}
+            for index, row in app.session_state["price_draft"].iterrows()
+        }
+        self.edit_cells(app, "all_prices_editor", rows)
+        self.click(app, "Guardar preços")
+        self.assertEqual(app.session_state["price_overrides"], PRICES)
+
+    @staticmethod
+    def export_bytes(downloads, label):
+        calls = [call for call in downloads.call_args_list if call.args and call.args[0] == label]
+        if not calls:
+            raise AssertionError(f"Export not rendered: {label}")
+        return calls[-1].kwargs["data"]
+
+    def test_clean_import_can_advance_without_false_unsaved_warning(self):
+        app = self.login()
+        self.import_orders(app)
+        app.button(key="step_Preços").click().run()
+        self.assert_app_ok(app)
+        self.assertEqual(app.session_state["nav_committed"], "Preços")
+        self.assertFalse(any(button.label == "Guardar e continuar" for button in app.button))
+
+    def test_save_and_continue_commits_pending_prices(self):
+        app = self.login()
+        self.import_orders(app)
+        app.button(key="step_Preços").click().run()
+        self.edit_cells(app, "all_prices_editor", {0: {"Preco": 3.5}, 1: {"Preco": 4.0}})
+        app.button(key="step_Mensagens").click().run()
+        self.assertTrue(app.session_state["show_unsaved_nav_dialog"])
+        self.click(app, "Guardar e continuar")
+        self.assertEqual(app.session_state["nav_committed"], "Mensagens")
+        self.assertEqual(app.session_state["price_overrides"], PRICES)
+        message = next(area.value for area in app.text_area if area.label == "Mensagem deste cliente")
+        self.assertIn("13,00 €", message)
+
+    def test_saved_manual_prices_remain_in_editor_after_leaving_and_returning(self):
+        app = self.login()
+        self.import_orders(app)
+        self.save_prices(app)
+        app.button(key="step_Mensagens").click().run()
+        self.assert_app_ok(app)
+        app.button(key="step_Preços").click().run()
+        self.assert_app_ok(app)
+        self.assertEqual(app.session_state["nav_committed"], "Preços")
+        self.assertEqual(app.session_state["price_draft"]["Preco"].tolist(), [3.5, 4.0])
+        self.assertEqual(app.session_state["price_overrides"], PRICES)
+        self.assertFalse(any(button.label == "Guardar e continuar" for button in app.button))
+
+    def test_excel_prices_can_fill_an_existing_draft_and_be_saved(self):
+        workbook = io.BytesIO()
+        orders = pd.read_csv(ROOT / "examples/encomendas_comments.csv", dtype=str).fillna("")
+        prices = pd.read_csv(ROOT / "examples/precos.csv", dtype=str)
+        expected_prices = {normalize_produto_key("REF 1"): 10.5, normalize_produto_key("REF 2"): 2.5}
+        with pd.ExcelWriter(workbook, engine="openpyxl") as writer:
+            orders.to_excel(writer, sheet_name="Comments", index=False)
+            prices.to_excel(writer, sheet_name="Preços", index=False)
+        app = self.login()
+        app.session_state["uploaded_input_cache"] = {"name": "direto.xlsx", "bytes": workbook.getvalue()}
+        app.run()
+        self.assert_app_ok(app)
+        self.assertEqual(app.session_state["price_overrides"], {})
+        self.assertEqual(next(metric.value for metric in app.metric if metric.label == "Linhas com preço"), "0 / 3")
+        app.button(key="step_Preços").click().run()
+        self.assert_app_ok(app)
+        self.assertIsInstance(app.session_state["price_draft"], pd.DataFrame)
+        app.button(key="excel_prices_to_draft").click().run()
+        self.assert_app_ok(app)
+        self.assertEqual(app.session_state["price_draft"]["Preco"].tolist(), [10.5, 2.5])
+        self.assertEqual(app.session_state["price_overrides"], {})
+        self.assertEqual(next(metric.value for metric in app.metric if metric.label == "Linhas com preço"), "0 / 3")
+        app.button(key="excel_prices_to_save").click().run()
+        self.assert_app_ok(app)
+        self.assertEqual(app.session_state["price_overrides"], expected_prices)
+        self.assertEqual(next(metric.value for metric in app.metric if metric.label == "Linhas com preço"), "3 / 3")
+        app.button(key="step_Mensagens").click().run()
+        self.assert_app_ok(app)
+        message = next(area.value for area in app.text_area if area.label == "Mensagem deste cliente")
+        self.assertIn("24,75 €", message)
+
+    def test_save_and_continue_updates_messages_and_label_exports(self):
+        app = self.login()
+        self.import_orders(app)
+        self.save_prices(app)
+        app.button(key="step_Operação").click().run()
+        self.assert_app_ok(app)
+
+        self.edit_cells(app, "comments_editor", {0: {"Quantidade": 3.0}})
+        app.session_state["pending_comment_clear_clients"] = ["Ana Silva"]
+        app.button(key="step_Mensagens").click().run()
+        self.assertTrue(app.session_state["show_unsaved_nav_dialog"])
+        self.assertEqual(app.session_state["nav_committed"], "Operação")
+
+        with patch.object(st, "download_button", wraps=st.download_button) as downloads:
+            self.click(app, "Guardar e continuar")
+            self.assertEqual(app.session_state["nav_committed"], "Mensagens")
+            committed = app.session_state["orders_draft"]
+            self.assertEqual(float(committed.loc[0, "Quantidade"]), 3.0)
+            self.assertEqual(committed.loc[committed["Cliente"] == "Ana Silva", "Comentário"].tolist(), ["", ""])
+            self.assertEqual(app.session_state["pending_comment_clear_clients"], [])
+
+            message = next(area.value for area in app.text_area if area.label == "Mensagem deste cliente")
+            self.assertIn("Ana Silva", message)
+            self.assertIn("16,50 €", message)
+            text = self.export_bytes(downloads, "Descarregar texto (.txt)").decode("utf-8")
+            self.assertIn("Ana Silva", text)
+            self.assertIn("Bruno Costa", text)
+            self.assertIn("16,50 €", text)
+            self.assertIn("3,50 €", text)
+
+            app.button(key="step_Etiquetas").click().run()
+            self.assert_app_ok(app)
+            app.radio(key="labels_pick_mode").set_value("Todas").run()
+            self.assert_app_ok(app)
+            html = self.export_bytes(downloads, "Descarregar etiquetas (HTML)").decode("utf-8")
+            self.assertEqual(html.count('<div class="label">'), 3)
+            self.assertIn("REF 1 — 3 / m", html)
+            self.assertIn("Preço: 3,50 €", html)
+            self.assertIn("Preço: 4,00 €", html)
+            self.assertLess(html.index("Ana Silva"), html.index("Bruno Costa"))
+            self.assertIn("size: 100mm 150mm", html)
+
+    def test_saved_session_reopens_orders_prices_ids_and_label_order(self):
+        app = self.login()
+        self.import_orders(app)
+        self.save_prices(app)
+        app.button(key="step_Operação").click().run()
+        self.edit_cells(app, "comments_editor", {0: {"Quantidade": 3.0}})
+        self.click(app, "Aplicar alterações")
+        next(item for item in app.text_input if item.label == "Nome da sessão").set_value("Direto de teste")
+        self.click(app, "Guardar sessão")
+        sessions = sessions_json.list_sessions()
+        self.assertEqual(len(sessions), 1)
+        saved = sessions_json.load_session(sessions[0]["path"])
+        self.assertEqual(saved["price_overrides"], PRICES)
+        self.assertEqual(float(saved["orders"][0]["Quantidade"]), 3.0)
+        self.assertEqual(saved["orders"][0]["Hora"], "1:05")
+        self.assertEqual(saved["orders"][0]["UserId"], "100000000001")
+        self.assertEqual(saved["orders"][0]["ProfileId"], "ana.silva")
+
+        reopened = self.login()
+        reopened.radio(key="nav_page").set_value("Histórico").run()
+        self.click(reopened, "Abrir")
+        reopened.button(key="step_Operação").click().run()
+        self.assert_app_ok(reopened)
+        self.assertEqual(reopened.session_state["price_overrides"], PRICES)
+        orders = reopened.session_state["orders_draft"]
+        self.assertEqual(float(orders.loc[0, "Quantidade"]), 3.0)
+        self.assertEqual(orders["Hora"].tolist(), ["1:05", "2:10", "10:02"])
+        reopened.button(key="step_Etiquetas").click().run()
+        self.assert_app_ok(reopened)
+        self.assertIn("Hora (↑)", reopened.selectbox(key="labels_order").options)
+
+    def test_opening_session_replaces_previous_orders_and_prices_on_any_page(self):
+        sessions_json.save_session(
+            label="Sessão para recuperar",
+            orders_for_calc=pd.DataFrame({"Cliente": ["Cliente recuperado"], "Produto": ["REF 1"], "Quantidade": [2]}),
+            price_overrides={normalize_produto_key("REF 1"): 9.0},
+            meta={},
+        )
+        app = self.login()
+        self.import_orders(app)
+        self.save_prices(app)
+        app.radio(key="nav_page").set_value("Histórico").run()
+        self.assert_app_ok(app)
+        self.assertEqual(app.session_state["nav_committed"], "Histórico")
+        self.click(app, "Abrir")
+        app.button(key="step_Mensagens").click().run()
+        self.assert_app_ok(app)
+        self.assertEqual(app.session_state["price_overrides"], {normalize_produto_key("REF 1"): 9.0})
+        message = next(area.value for area in app.text_area if area.label == "Mensagem deste cliente")
+        self.assertIn("Cliente recuperado", message)
+        self.assertIn("18,00 €", message)
+        self.assertNotIn("Ana Silva", message)
+        app.button(key="step_Preços").click().run()
+        self.assert_app_ok(app)
+        self.assertEqual(app.session_state["nav_committed"], "Preços")
+        self.assertEqual(app.session_state["price_draft"]["Preco"].tolist(), [9.0])
+
+    def test_consecutive_cell_edits_survive_reruns_and_reset_or_discard_cleanly(self):
+        app = self.login()
+        self.import_orders(app)
+        self.edit_cells(app, "comments_editor", {0: {"Quantidade": 3.0}})
+        self.assertEqual(app.session_state["orders_working"]["Quantidade"].tolist(), [3.0, 1.5, 1.0])
+        self.edit_cells(app, "comments_editor", {0: {"Quantidade": 3.0}, 1: {"Quantidade": 2.0}})
+        self.assertEqual(app.session_state["orders_working"]["Quantidade"].tolist(), [3.0, 2.0, 1.0])
+        self.assertEqual(app.session_state["orders_draft"]["Quantidade"].tolist(), [2.0, 1.5, 1.0])
+        self.click(app, "Repor (voltar ao guardado)")
+        app.run()
+        self.assert_app_ok(app)
+        self.assertEqual(app.session_state["orders_working"]["Quantidade"].tolist(), [2.0, 1.5, 1.0])
+
+        self.edit_cells(app, "comments_editor", {0: {"Quantidade": 4.0}})
+        app.button(key="step_Preços").click().run()
+        self.assertTrue(app.session_state["show_unsaved_nav_dialog"])
+        self.click(app, "Sair sem guardar")
+        self.assertEqual(app.session_state["nav_committed"], "Preços")
+        self.assertEqual(app.session_state["orders_draft"]["Quantidade"].tolist(), [2.0, 1.5, 1.0])
+        self.edit_cells(app, "all_prices_editor", {0: {"Preco": 3.5}})
+        self.assertEqual(float(app.session_state["price_draft"].loc[0, "Preco"]), 3.5)
+        self.edit_cells(app, "all_prices_editor", {0: {"Preco": 3.5}, 1: {"Preco": 4.0}})
+        self.assertEqual(app.session_state["price_draft"]["Preco"].tolist(), [3.5, 4.0])
+        self.assertEqual(app.session_state["price_overrides"], {})
+        self.click(app, "Guardar preços")
+        self.assertEqual(app.session_state["price_overrides"], PRICES)
+
+        self.edit_cells(app, "all_prices_editor", {0: {"Preco": 9.0}})
+        self.edit_cells(app, "all_prices_editor", {0: {"Preco": 9.0}, 1: {"Preco": 8.0}})
+        self.assertEqual(app.session_state["price_draft"]["Preco"].tolist(), [9.0, 8.0])
+        self.click(app, "Repor rascunho (voltar ao guardado)")
+        app.run()
+        self.assert_app_ok(app)
+        self.assertEqual(app.session_state["price_draft"]["Preco"].tolist(), [3.5, 4.0])
+        self.edit_cells(app, "all_prices_editor", {0: {"Preco": 6.0}})
+        app.button(key="step_Operação").click().run()
+        self.assertTrue(app.session_state["show_unsaved_nav_dialog"])
+        self.click(app, "Sair sem guardar")
+        self.assertEqual(app.session_state["nav_committed"], "Operação")
+        self.assertEqual(app.session_state["orders_working"]["Quantidade"].tolist(), [2.0, 1.5, 1.0])
+        app.button(key="step_Preços").click().run()
+        self.assert_app_ok(app)
+        self.assertEqual(app.session_state["price_draft"]["Preco"].tolist(), [3.5, 4.0])
+        self.assertEqual(app.session_state["price_overrides"], PRICES)
+
+
+if __name__ == "__main__":
+    unittest.main()

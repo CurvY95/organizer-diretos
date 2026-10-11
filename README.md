@@ -15,16 +15,28 @@ O fluxo principal é:
 
 ## Como correr
 
+Use **Python 3.10 ou superior**. Os comandos abaixo usam Python 3.12; se tiver outra versão suportada instalada, ajuste `python3.12`.
+
 ```bash
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 export ORGANIZER_USER="admin"
 export ORGANIZER_PASS="trocar-esta-password"
 
-streamlit run app.py
+python -m streamlit run app.py
 ```
+
+Se a `.venv` existente usar Python 3.9, crie um ambiente separado para atualizar sem a substituir:
+
+```bash
+python3.12 -m venv .venv-next
+source .venv-next/bin/activate
+python -m pip install -r requirements.txt
+```
+
+Confirme a versão com `python --version` depois de ativar o ambiente. Tanto `.venv/` como `.venv-next/` são locais e não devem ser versionados.
 
 Também pode usar `AUTH_USER` e `AUTH_PASS` em `.streamlit/secrets.toml`.
 Veja também `.env.example` para as variáveis suportadas.
@@ -34,7 +46,7 @@ Veja também `.env.example` para as variáveis suportadas.
 Os testes usam `unittest` e não exigem dependências extra além das dependências da app:
 
 ```bash
-python3 -m unittest discover
+python -m unittest discover
 ```
 
 Há ficheiros de exemplo em `examples/`:

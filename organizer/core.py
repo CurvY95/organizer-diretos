@@ -43,7 +43,7 @@ ORDERS_ALIASES = {
 
 PRICES_ALIASES = {
     "Produto": ["Produto", "Ref", "REF", "Referência", "Referencia", "produto", "ref"],
-    "Preco": ["Preco", "Preço", "Preço/m", "Price/m", "UnitPrice", "unitprice", "preco", "price", "valor"],
+    "Preco": ["Preco", "Preço", "Preço/m", "Price/m", "UnitPrice", "unitprice", "preco", "precos", "preços", "price", "valor"],
 }
 
 

@@ -49,10 +49,9 @@ def build_session_payload(
     orders_clean = apply_aliases(orders_clean, ORDERS_ALIASES)
 
     keep = REQUIRED_ORDERS_COLS.copy()
-    if "Comentario" in orders_clean.columns:
-        keep.append("Comentario")
-    if "Ativo" in orders_clean.columns:
-        keep.append("Ativo")
+    for optional in ["UserId", "ProfileId", "Hora", "Comentario", "Ativo"]:
+        if optional in orders_clean.columns:
+            keep.append(optional)
     orders_clean = orders_clean[keep].copy()
 
     refs = int(orders_clean["Produto"].astype(str).str.strip().str.lower().nunique())

@@ -429,6 +429,29 @@ def _finish_navigation(save: bool) -> None:
     _cancel_navigation()
 
 
+def _reset_order_workspace() -> None:
+    for key in (
+        "orders_draft", "orders_draft_source", "orders_working", "orders_working_source",
+        "orders_editor_base", "price_editor_base",
+        "price_draft", "price_draft_products", "comments_editor", "all_prices_editor",
+        "labels_editor", "prices_upload_file", "prices_upload_sheet_pick", "price_overrides",
+        "pending_comment_clear_clients", "excel_prices_map", "prices_last_saved_at",
+        "history_session_id", "_ids_bulk_fp", "_ids_bulk_map", "uploaded_input_cache",
+        "loaded_session", "session_label",
+    ):
+        st.session_state.pop(key, None)
+
+
+def _activate_session(data: dict) -> None:
+    # A saved direct is a complete snapshot, including its own prices and editor state.
+    _reset_order_workspace()
+    st.session_state["loaded_session"] = data
+    st.session_state["price_overrides"] = dict(data.get("price_overrides") or {})
+    st.session_state["session_label"] = data.get("label") or ""
+    st.session_state["history_session_id"] = data.get("id") or safe_session_id(now_iso())
+    st.session_state["open_session_navigation"] = True
+
+
 def _cancel_navigation() -> None:
     st.session_state["nav_pending"] = None
     st.session_state["show_unsaved_nav_dialog"] = False
@@ -455,6 +478,10 @@ def _save_all_pending_changes() -> None:
         st.session_state["orders_working"] = w
         st.session_state["orders_draft"] = w.copy()
     st.session_state["pending_comment_clear_clients"] = []
+    if isinstance(st.session_state.get("orders_working"), pd.DataFrame):
+        st.session_state["orders_editor_base"] = st.session_state["orders_working"].copy()
+    st.session_state.pop("comments_editor", None)
+    st.session_state.pop("all_prices_editor", None)
 
     # Prices
     draft = st.session_state.get("price_draft")
@@ -468,23 +495,58 @@ def _save_all_pending_changes() -> None:
             if pd.notna(v):
                 new_overrides[str(k)] = float(v)
         st.session_state["price_overrides"] = new_overrides
+        st.session_state["price_editor_base"] = draft.copy()
         st.session_state["prices_last_saved_at"] = pd.Timestamp.utcnow().isoformat()
 
 
-def _discard_all_pending_changes() -> None:
-    # Orders: drop working edits back to committed
-    if "orders_draft" in st.session_state and isinstance(st.session_state.get("orders_draft"), pd.DataFrame):
-        st.session_state["orders_working"] = st.session_state["orders_draft"].copy()
-    st.session_state["pending_comment_clear_clients"] = []
+def _commit_orders_editor() -> None:
+    working = st.session_state.get("orders_working")
+    if isinstance(working, pd.DataFrame):
+        st.session_state["orders_draft"] = working.copy()
+        st.session_state["orders_editor_base"] = working.copy()
+    st.session_state.pop("comments_editor", None)
 
-    # Prices: reset draft back to saved overrides
+
+def _commit_prices_editor() -> None:
+    draft = st.session_state.get("price_draft")
+    if not isinstance(draft, pd.DataFrame):
+        return
+    overrides: dict[str, float] = {}
+    for _, row in draft.iterrows():
+        key = oc.normalize_produto_key(row.get("ProdutoKey") or "")
+        price = row.get("Preco")
+        if key and pd.notna(price):
+            overrides[key] = float(price)
+    st.session_state["price_overrides"] = overrides
+    st.session_state["price_editor_base"] = draft.copy()
+    st.session_state["prices_last_saved_at"] = pd.Timestamp.utcnow().isoformat()
+    st.session_state.pop("all_prices_editor", None)
+
+
+def _reset_orders_editor() -> None:
+    draft = st.session_state.get("orders_draft")
+    if isinstance(draft, pd.DataFrame):
+        st.session_state["orders_working"] = draft.copy()
+        st.session_state["orders_editor_base"] = draft.copy()
+    st.session_state.pop("comments_editor", None)
+
+
+def _reset_prices_editor() -> None:
     draft = st.session_state.get("price_draft")
     if isinstance(draft, pd.DataFrame):
-        cur = st.session_state.get("price_overrides") or {}
-        d2 = draft.copy()
-        d2["ProdutoKey"] = d2["ProdutoKey"].astype(str).map(lambda s: oc.normalize_produto_key(s))
-        d2["Preco"] = d2["ProdutoKey"].map(lambda k: cur.get(str(k), None))
-        st.session_state["price_draft"] = d2
+        current = st.session_state.get("price_overrides") or {}
+        reset = draft.copy()
+        reset["ProdutoKey"] = reset["ProdutoKey"].map(oc.normalize_produto_key)
+        reset["Preco"] = reset["ProdutoKey"].map(lambda key: current.get(key, None))
+        st.session_state["price_draft"] = reset
+        st.session_state["price_editor_base"] = reset.copy()
+    st.session_state.pop("all_prices_editor", None)
+
+
+def _discard_all_pending_changes() -> None:
+    _reset_orders_editor()
+    _reset_prices_editor()
+    st.session_state["pending_comment_clear_clients"] = []
 
 
 def _build_orders_for_calc_from_state(*, orders_df: pd.DataFrame) -> pd.DataFrame:
@@ -1121,7 +1183,7 @@ ___BRAND_VARS___
 
   /* Calmer surfaces, clear selection and accessible keyboard focus. */
   :root { --od-bg: #f5f7fa; --od-line: #e1e7e5; --od-sidebar: #163c32; --od-sidebar-2: #102f27; }
-  .block-container { max-width: 1200px; padding-top: 2rem; }
+  .block-container { max-width: 1200px; padding-top: 4rem; }
   .od-workbench { border: none; background: transparent; box-shadow: none; padding: 0 0 1rem; }
   .od-hero-title { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 750; }
   .od-hero, .od-card { border-radius: 16px; padding: 1.5rem; box-shadow: none; }
@@ -1137,7 +1199,7 @@ ___BRAND_VARS___
   button:focus-visible, a:focus-visible { outline: 3px solid #36866b !important; outline-offset: 3px; }
   [data-testid="stTabs"] button[aria-selected="true"] p { color: white !important; }
   @media (max-width: 760px) {
-    .block-container { padding: 1rem 1rem 2rem; }
+    .block-container { padding: 4rem 1rem 2rem; }
     .od-hero { padding: 1rem; }
   }
 </style>
@@ -1148,6 +1210,10 @@ st.markdown(_OD_COMMERCIAL_CSS.replace("___BRAND_VARS___", _brand_vars), unsafe_
 require_login()
 
 STATE_PATH = os.path.join(os.getcwd(), "saved", "organizer_state.json")
+
+if st.session_state.pop("open_session_navigation", False):
+    st.session_state["nav_page"] = "Operação"
+    st.session_state["nav_committed"] = "Operação"
 
 with st.sidebar:
     _logo_sb = _brand_logo_img_html()
@@ -1337,8 +1403,8 @@ elif nav == "Histórico":
                     if not data.get("orders"):
                         st.error("Sessão vazia ou não encontrada.")
                     else:
-                        st.session_state["loaded_session"] = data
-                        st.success("Sessão carregada. Vá a **Operação**.")
+                        _activate_session(data)
+                        st.rerun()
                 except Exception as e:
                     st.error(f"Falha ao abrir: {e}")
         with c2:
@@ -1406,7 +1472,11 @@ else:
         if uploaded is not None:
             try:
                 # Cache bytes so reruns / navigation don't lose the file (Streamlit Cloud behavior)
-                st.session_state["uploaded_input_cache"] = {"name": uploaded.name or "", "bytes": uploaded.getvalue()}
+                new_input = {"name": uploaded.name or "", "bytes": uploaded.getvalue()}
+                if new_input != st.session_state.get("uploaded_input_cache"):
+                    _reset_order_workspace()
+                    st.session_state["uploaded_input_cache"] = new_input
+                    st.rerun()
                 name = (uploaded.name or "").lower()
                 if name.endswith(".csv"):
                     # Tampermonkey export uses ';' delimiter and often includes UTF-8 BOM.
@@ -1678,12 +1748,16 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 committed["Quantidade"] = _coerce_number_series(committed["Quantidade"])
                 if fill_missing_qty:
                     committed["Quantidade"] = committed["Quantidade"].fillna(1.0)
+                st.session_state["orders_draft"] = committed.copy()
 
                 if "orders_working" not in st.session_state or st.session_state.get("orders_working_source") != (
                     orders_source_label or ""
                 ):
                     st.session_state["orders_working_source"] = (orders_source_label or "")
                     st.session_state["orders_working"] = committed.copy()
+
+                if "orders_editor_base" not in st.session_state:
+                    st.session_state["orders_editor_base"] = st.session_state["orders_working"].copy()
 
                 col_cfg = {
                     "Incluir": st.column_config.CheckboxColumn("Incluir", help="Se desativar, esta linha não entra nas contas."),
@@ -1703,9 +1777,9 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 st.markdown("<div class='od-card-h' style='margin-top:6px'>Rascunho operacional</div>", unsafe_allow_html=True)
                 st.caption("Edita livremente. O resumo, mensagens e etiquetas só mudam depois de aplicar.")
 
-                with st.form("orders_form", border=False):
+                with st.container(border=False):
                     edited_orders = st.data_editor(
-                        st.session_state["orders_working"],
+                        st.session_state["orders_editor_base"],
                         width="stretch",
                         num_rows="fixed",
                         column_config={
@@ -1715,11 +1789,11 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     )
                     b1, b2, _ = st.columns([1, 1, 2])
                     with b1:
-                        do_apply_orders = st.form_submit_button("Aplicar alterações", type="primary")
+                        do_apply_orders = st.button("Aplicar alterações", type="primary", on_click=_commit_orders_editor)
                     with b2:
-                        do_reset_orders = st.form_submit_button("Repor (voltar ao guardado)")
+                        do_reset_orders = st.button("Repor (voltar ao guardado)", on_click=_reset_orders_editor)
 
-                # Keep working state updated only inside the form flow
+                # Keep working edits separate from committed orders
                 st.session_state["orders_working"] = edited_orders.copy()
 
                 if do_reset_orders:
@@ -1822,9 +1896,10 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
         # Ensure this exists on all pages (Preços/Mensagens/Etiquetas) even if Encomendas page wasn't opened.
         orders_for_calc = _build_orders_for_calc_from_state(orders_df=orders_df)
 
+        # Imported prices remain a draft until explicitly saved.
         parsed = parse_inputs(
             orders_for_calc,
-            prices_df,
+            pd.DataFrame(columns=["Produto", "Preco"]),
             fill_missing_quantity_with=1.0 if fill_missing_qty else None,
         )
         if "price_overrides" not in st.session_state:
@@ -1896,13 +1971,17 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         do_excel_save = st.button("Usar preços do Excel (guardar)", type="primary", key="excel_prices_to_save")
                     if do_excel_draft or do_excel_save:
                         excel_prices_map = st.session_state.get("excel_prices_map") or {}
-                        draft = st.session_state.get("price_draft") or price_table[["Produto", "ProdutoKey", "Preco"]].copy()
+                        draft = st.session_state.get("price_draft")
+                        if not isinstance(draft, pd.DataFrame):
+                            draft = price_table[["Produto", "ProdutoKey", "Preco"]]
                         draft = draft.copy()
                         draft["ProdutoKey"] = draft["ProdutoKey"].astype(str).map(lambda s: oc.normalize_produto_key(s))
                         draft["Preco"] = draft["ProdutoKey"].map(lambda k: excel_prices_map.get(str(k), None)).combine_first(
                             draft["Preco"]
                         )
                         st.session_state["price_draft"] = draft
+                        st.session_state["price_editor_base"] = draft.copy()
+                        st.session_state.pop("all_prices_editor", None)
                         if do_excel_save:
                             new_overrides: dict[str, float] = {}
                             for _, r in draft.iterrows():
@@ -2030,6 +2109,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     draft["Preco"]
                 )
                 st.session_state["price_draft"] = draft
+                st.session_state["price_editor_base"] = draft.copy()
+                st.session_state.pop("all_prices_editor", None)
 
                 if do_import_and_save:
                     new_overrides: dict[str, float] = {}
@@ -2047,9 +2128,11 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     st.success("Preços importados para o rascunho. Clique em **Guardar preços** para aplicar.")
                 st.rerun()
 
-            with st.form("prices_form", border=False):
+            if "price_editor_base" not in st.session_state:
+                st.session_state["price_editor_base"] = st.session_state["price_draft"].copy()
+            with st.container(border=False):
                 edited = st.data_editor(
-                    st.session_state["price_draft"],
+                    st.session_state["price_editor_base"],
                     width="stretch",
                     num_rows="fixed",
                     column_config={
@@ -2062,9 +2145,9 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
                 c1, c2, c3 = st.columns([1, 1, 2])
                 with c1:
-                    do_save = st.form_submit_button("Guardar preços", type="primary")
+                    do_save = st.button("Guardar preços", type="primary", on_click=_commit_prices_editor)
                 with c2:
-                    do_reset = st.form_submit_button("Repor rascunho (voltar ao guardado)")
+                    do_reset = st.button("Repor rascunho (voltar ao guardado)", on_click=_reset_prices_editor)
                 with c3:
                     st.markdown("<div class='od-muted'>Os preços só aplicam depois de guardar.</div>", unsafe_allow_html=True)
 
@@ -2076,16 +2159,6 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
             st.session_state["price_draft"] = edited.copy()
 
             if do_save:
-                new_overrides: dict[str, float] = {}
-                for _, r in edited.iterrows():
-                    k = oc.normalize_produto_key(r.get("ProdutoKey") or "")
-                    if not k:
-                        continue
-                    v = r.get("Preco")
-                    if pd.notna(v):
-                        new_overrides[k] = float(v)
-                st.session_state["price_overrides"] = new_overrides
-                st.session_state["prices_last_saved_at"] = pd.Timestamp.utcnow().isoformat()
                 st.success("Preços guardados. As outras abas já usam estes valores.")
                 st.rerun()
 
