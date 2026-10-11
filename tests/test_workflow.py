@@ -142,6 +142,109 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(app.session_state["price_overrides"], PRICES)
         self.assertFalse(any(button.label == "Guardar e continuar" for button in app.button))
 
+    def test_manual_message_edits_do_not_leak_between_clients(self):
+        app = self.login()
+        self.import_orders(app)
+        self.save_prices(app)
+        app.button(key="step_Mensagens").click().run()
+        self.assert_app_ok(app)
+        self.assertEqual(app.selectbox(key="messages_client_pick").value, "Ana Silva")
+        self.assertTrue(app.button(key="messages_previous_client").disabled)
+        app.checkbox(key="messages_allow_edit").check().run()
+        message = next(area for area in app.text_area if area.label == "Mensagem deste cliente")
+        message.set_value("Mensagem ajustada só para Ana").run()
+
+        app.button(key="messages_next_client").click().run()
+        self.assert_app_ok(app)
+        self.assertEqual(app.selectbox(key="messages_client_pick").value, "Bruno Costa")
+        self.assertTrue(app.button(key="messages_next_client").disabled)
+        message = next(area for area in app.text_area if area.label == "Mensagem deste cliente")
+        self.assertIn("Bruno Costa", message.value)
+        self.assertIn("3,50 €", message.value)
+        self.assertNotIn("Mensagem ajustada só para Ana", message.value)
+        message.set_value("Mensagem ajustada só para Bruno").run()
+
+        app.button(key="messages_previous_client").click().run()
+        self.assert_app_ok(app)
+        message = next(area for area in app.text_area if area.label == "Mensagem deste cliente")
+        self.assertEqual(message.value, "Mensagem ajustada só para Ana")
+        app.button(key="messages_next_client").click().run()
+        self.assert_app_ok(app)
+        message = next(area for area in app.text_area if area.label == "Mensagem deste cliente")
+        self.assertEqual(message.value, "Mensagem ajustada só para Bruno")
+
+    def test_manual_message_refreshes_after_price_change_and_copies_intentional_empty_text(self):
+        app = self.login()
+        self.import_orders(app)
+        self.save_prices(app)
+        app.button(key="step_Mensagens").click().run()
+        app.checkbox(key="messages_allow_edit").check().run()
+        message = next(area for area in app.text_area if area.label == "Mensagem deste cliente")
+        original_key = message.key
+        message.set_value("Texto com o total antigo").run()
+
+        # Recalculate the same client with a newly committed price while the
+        # manual editor is visible. Its previous text must not hide the new total.
+        app.session_state["price_overrides"] = {**PRICES, normalize_produto_key("REF 1"): 6.0}
+        app.run()
+        self.assert_app_ok(app)
+        message = next(area for area in app.text_area if area.label == "Mensagem deste cliente")
+        self.assertNotEqual(message.key, original_key)
+        self.assertIn("18,00 €", message.value)
+        self.assertNotIn("Texto com o total antigo", message.value)
+
+        with patch.object(st.components.v1, "html", wraps=st.components.v1.html) as components:
+            message.set_value("").run()
+            self.assert_app_ok(app)
+            self.assertEqual(next(area.value for area in app.text_area if area.label == "Mensagem deste cliente"), "")
+            copy_scripts = [
+                call.args[0] for call in components.call_args_list
+                if call.args and 'id="copy_msgtab_' in call.args[0]
+            ]
+            self.assertEqual(len(copy_scripts), 1)
+            self.assertIn('const text = "";', copy_scripts[0])
+
+    def test_showing_order_details_preserves_unapplied_edits_and_navigation_guard(self):
+        app = self.login()
+        self.import_orders(app)
+        self.edit_cells(app, "comments_editor", {0: {"Quantidade": 4.0}})
+        app.toggle(key="orders_show_details").set_value(True).run()
+        self.assert_app_ok(app)
+        self.assertEqual(float(app.session_state["orders_working"].loc[0, "Quantidade"]), 4.0)
+        self.assertEqual(float(app.session_state["orders_draft"].loc[0, "Quantidade"]), 2.0)
+        app.toggle(key="orders_show_details").set_value(False).run()
+        self.assert_app_ok(app)
+        self.assertEqual(float(app.session_state["orders_working"].loc[0, "Quantidade"]), 4.0)
+        self.assertEqual(float(app.session_state["orders_draft"].loc[0, "Quantidade"]), 2.0)
+
+        app.button(key="step_Preços").click().run()
+        self.assertTrue(app.session_state["show_unsaved_nav_dialog"])
+        self.assertEqual(app.session_state["nav_committed"], "Operação")
+        self.click(app, "Continuar a editar")
+        self.click(app, "Aplicar alterações")
+        self.assertEqual(float(app.session_state["orders_draft"].loc[0, "Quantidade"]), 4.0)
+        app.button(key="step_Preços").click().run()
+        self.assert_app_ok(app)
+        self.assertEqual(app.session_state["nav_committed"], "Preços")
+        self.assertFalse(any(button.label == "Guardar e continuar" for button in app.button))
+
+    def test_label_download_is_disabled_until_at_least_one_label_is_selected(self):
+        app = self.login()
+        self.import_orders(app)
+        self.save_prices(app)
+        with patch.object(st, "download_button", wraps=st.download_button) as downloads:
+            app.button(key="step_Etiquetas").click().run()
+            self.assert_app_ok(app)
+            label_calls = [call for call in downloads.call_args_list if call.args and call.args[0] == "Descarregar etiquetas (HTML)"]
+            self.assertTrue(label_calls[-1].kwargs["disabled"])
+            self.assertIn("0 de 3 etiquetas selecionadas", " ".join(item.value for item in app.caption))
+
+            app.radio(key="labels_pick_mode").set_value("Todas").run()
+            self.assert_app_ok(app)
+            label_calls = [call for call in downloads.call_args_list if call.args and call.args[0] == "Descarregar etiquetas (HTML)"]
+            self.assertFalse(label_calls[-1].kwargs["disabled"])
+            self.assertEqual(label_calls[-1].kwargs["data"].decode("utf-8").count('<div class="label">'), 3)
+
     def test_excel_prices_can_fill_an_existing_draft_and_be_saved(self):
         workbook = io.BytesIO()
         orders = pd.read_csv(ROOT / "examples/encomendas_comments.csv", dtype=str).fillna("")

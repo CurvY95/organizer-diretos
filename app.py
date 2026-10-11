@@ -438,6 +438,7 @@ def _reset_order_workspace() -> None:
         "pending_comment_clear_clients", "excel_prices_map", "prices_last_saved_at",
         "history_session_id", "_ids_bulk_fp", "_ids_bulk_map", "uploaded_input_cache",
         "loaded_session", "session_label",
+        "message_manual_drafts",
     ):
         st.session_state.pop(key, None)
 
@@ -528,6 +529,14 @@ def _reset_orders_editor() -> None:
     if isinstance(draft, pd.DataFrame):
         st.session_state["orders_working"] = draft.copy()
         st.session_state["orders_editor_base"] = draft.copy()
+    st.session_state.pop("comments_editor", None)
+
+
+def _change_orders_columns() -> None:
+    # Changing the visible columns recreates the widget; retain its working edits.
+    working = st.session_state.get("orders_working")
+    if isinstance(working, pd.DataFrame):
+        st.session_state["orders_editor_base"] = working.copy()
     st.session_state.pop("comments_editor", None)
 
 
@@ -1073,13 +1082,13 @@ ___BRAND_VARS___
     border-radius: 8px;
     border: 1px solid var(--od-line);
   }
-  [data-testid="stTabs"] button[role="tab"] {
+  [data-testid="stTabs"] [role="tab"] {
     border-radius: 6px !important;
     font-weight: 760 !important;
     padding: 0.45rem 0.85rem !important;
     color: var(--od-ink-soft) !important;
   }
-  [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+  [data-testid="stTabs"] [role="tab"][aria-selected="true"] {
     background: var(--od-success) !important;
     color: #ffffff !important;
   }
@@ -1197,10 +1206,22 @@ ___BRAND_VARS___
   [data-testid="stSidebar"] [role="radiogroup"] > label { padding: 0.65rem; border-radius: 10px; }
   [data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) { background: #ffffff20; }
   button:focus-visible, a:focus-visible { outline: 3px solid #36866b !important; outline-offset: 3px; }
-  [data-testid="stTabs"] button[aria-selected="true"] p { color: white !important; }
+  [data-testid="stTabs"] [role="tab"][aria-selected="true"] p { color: white !important; }
+  [data-testid="stTextArea"] textarea:disabled {
+    color: var(--od-ink-soft) !important;
+    -webkit-text-fill-color: var(--od-ink-soft) !important;
+    opacity: 1 !important;
+  }
   @media (max-width: 760px) {
     .block-container { padding: 4rem 1rem 2rem; }
     .od-hero { padding: 1rem; }
+    .st-key-workflow_steps [data-testid="stHorizontalBlock"] { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; }
+    .st-key-workflow_steps [data-testid="stColumn"] { width: 100%; min-width: 0; }
+    .st-key-workflow_steps button { padding: 0.4rem 0.5rem !important; }
+    .st-key-workflow_metrics [data-testid="stHorizontalBlock"] { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
+    .st-key-workflow_metrics [data-testid="stColumn"] { width: 100%; min-width: 0; }
+    .st-key-workflow_metrics [data-testid="stMetric"] { padding: 0.75rem; }
+    .st-key-workflow_metrics [data-testid="stMetricValue"] { font-size: 1.65rem; }
   }
 </style>
 """
@@ -1277,21 +1298,28 @@ with st.sidebar:
             st.session_state.pop("loaded_session", None)
             st.rerun()
 
+page_titles = {
+    "Operação": "Encomendas do direto",
+    "Preços": "Preços das referências",
+    "Mensagens": "Mensagens para os teus clientes",
+    "Etiquetas": "Prepara os envios",
+    "Histórico": "Retoma um direto guardado",
+    "Definições": "Personaliza o teu direto",
+}
 st.markdown(
     f'<div class="od-workbench"><div class="od-hero-kicker">{html.escape(_brand_display_name())}</div>'
-    '<div class="od-hero-title">Do direto à encomenda pronta.</div>'
-    '<div class="od-hero-sub od-muted">Segue as etapas abaixo. Podes voltar atrás sempre que precisares.</div></div>',
+    f'<div class="od-hero-title">{html.escape(page_titles.get(nav, nav))}</div>'
+    f'<div class="od-hero-sub od-muted">{html.escape(nav_desc.get(nav, ""))}</div></div>',
     unsafe_allow_html=True,
 )
-for col, (destination, label) in zip(st.columns(4), [
-    ("Operação", "1 · Encomendas"), ("Preços", "2 · Preços"),
-    ("Mensagens", "3 · Mensagens"), ("Etiquetas", "4 · Etiquetas"),
-]):
-    col.button(label, key=f"step_{destination}", width="stretch",
-               type="primary" if nav == destination else "secondary",
-               on_click=_request_navigation, args=(destination,))
-st.caption("Sessões guardadas e definições disponíveis no menu lateral.")
-_section("Encomendas" if nav == "Operação" else nav, nav_desc.get(nav, ""))
+with st.container(key="workflow_steps"):
+    for col, (destination, label) in zip(st.columns(4), [
+        ("Operação", "1 · Encomendas"), ("Preços", "2 · Preços"),
+        ("Mensagens", "3 · Mensagens"), ("Etiquetas", "4 · Etiquetas"),
+    ]):
+        col.button(label, key=f"step_{destination}", width="stretch",
+                   type="primary" if nav == destination else "secondary",
+                   on_click=_request_navigation, args=(destination,))
 workflow_status = st.container()
 
 # Unsaved changes modal (navigation guard)
@@ -1459,9 +1487,6 @@ else:
             empty_right.button("Abrir uma sessão guardada", on_click=_request_navigation,
                                args=("Histórico",), width="stretch")
 
-        if cached:
-            st.caption(f"Ficheiro atual: {cached.get('name', '')}")
-
         with st.expander("Importar outro ficheiro" if cached else "Importar CSV ou Excel", expanded=not bool(cached)):
             uploaded = st.file_uploader(
                 "Escolhe o ficheiro de encomendas",
@@ -1568,142 +1593,139 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
         if nav == "Operação":
             tab_upload, tab_comments, tab_summary = st.tabs(["Rever encomendas", "Limpar comentários", "Totais por cliente"])
         elif nav == "Preços":
-            (tab_prices,) = st.tabs(["Preços"])
+            tab_prices = st.container()
         elif nav == "Mensagens":
-            (tab_messages,) = st.tabs(["Mensagens"])
+            tab_messages = st.container()
         elif nav == "Etiquetas":
-            (tab_labels,) = st.tabs(["Etiquetas 10×15"])
+            tab_labels = st.container()
 
         if tab_comments is not None:
             with tab_comments:
                 _section("Comentários importados", "Revê a mensagem original por cliente e limpa comentários em lote antes de fechar contas.")
 
-            # Use the shared draft if available (keeps tabs in sync)
-            if "orders_draft" in st.session_state and isinstance(st.session_state["orders_draft"], pd.DataFrame):
-                draft = st.session_state["orders_draft"].copy()
-                # normalize column name for comment if present
-                if "Comentário" in draft.columns and "Comentario" not in draft.columns:
-                    draft = draft.rename(columns={"Comentário": "Comentario"})
-                orders_view = draft.rename(
-                    columns={
-                        "User ID": "UserId",
-                        "Profile ID": "ProfileId",
-                        "Referência": "Produto",
-                        "Quantidade": "Quantidade",
-                        "Hora": "Hora",
-                        "Comentario": "Comentario",
-                    }
-                )
-            else:
-                orders_view = _standardize_df_columns(orders_df)
-                orders_view = _apply_aliases(orders_view, ORDERS_ALIASES)
-                _validate_required_cols(orders_view, REQUIRED_ORDERS_COLS, "Encomendas (Comments)")
-
-            cols = ["Cliente"]
-            if "UserId" in orders_view.columns:
-                cols.append("UserId")
-            if "ProfileId" in orders_view.columns:
-                cols.append("ProfileId")
-            if "Hora" in orders_view.columns:
-                cols.append("Hora")
-            cols += ["Produto", "Quantidade"]
-            if "Comentario" in orders_view.columns:
-                cols.append("Comentario")
-
-            view = orders_view[cols].copy()
-            view["Cliente"] = view["Cliente"].astype(str).str.strip()
-            view["Produto"] = view["Produto"].astype(str).str.strip()
-            if "Comentario" in view.columns:
-                view["Comentario"] = view["Comentario"].astype(str)
-
-            if "Comentario" not in view.columns:
-                st.info("Não encontrei coluna de comentário no ficheiro. (Procurei: Comentário/Comment/Mensagem/OBS/Notas)")
-            else:
-                clients = sorted(view["Cliente"].dropna().astype(str).unique().tolist())
-                client_c = st.selectbox("Cliente", options=clients, key="comments_client_pick")
-                vc = view[view["Cliente"].astype(str) == str(client_c)].copy()
-
-                # Aggregate comments (some exports repeat per row)
-                raw_comments = (
-                    vc["Comentario"]
-                    .dropna()
-                    .astype(str)
-                    .map(lambda s: s.strip())
-                    .replace({"nan": "", "None": ""})
-                )
-                raw_comments = [c for c in raw_comments.tolist() if c]
-                combined = "\n\n---\n\n".join(dict.fromkeys(raw_comments)).strip()
-
-                st.text_area("Comentário(s)", value=combined or "—", height=200, disabled=True, key="comments_text")
-                st.dataframe(vc, width="stretch")
-
-                # Batch mode: mark many clients, apply once
-                st.session_state.setdefault("pending_comment_clear_clients", [])
-                pending = set([str(x) for x in (st.session_state.get("pending_comment_clear_clients") or [])])
-                if client_c:
-                    pending_hint = " (já marcado)" if str(client_c) in pending else ""
+                # Use the shared draft if available (keeps tabs in sync)
+                if "orders_draft" in st.session_state and isinstance(st.session_state["orders_draft"], pd.DataFrame):
+                    draft = st.session_state["orders_draft"].copy()
+                    # normalize column name for comment if present
+                    if "Comentário" in draft.columns and "Comentario" not in draft.columns:
+                        draft = draft.rename(columns={"Comentário": "Comentario"})
+                    orders_view = draft.rename(
+                        columns={
+                            "User ID": "UserId",
+                            "Profile ID": "ProfileId",
+                            "Referência": "Produto",
+                            "Quantidade": "Quantidade",
+                            "Hora": "Hora",
+                            "Comentario": "Comentario",
+                        }
+                    )
                 else:
-                    pending_hint = ""
+                    orders_view = _standardize_df_columns(orders_df)
+                    orders_view = _apply_aliases(orders_view, ORDERS_ALIASES)
+                    _validate_required_cols(orders_view, REQUIRED_ORDERS_COLS, "Encomendas (Comments)")
 
-                cbtn1, cbtn2, cbtn3 = st.columns([1, 1, 2])
-                with cbtn1:
-                    add_pending = st.button(
-                        f"Marcar para remover{pending_hint}",
-                        type="secondary",
-                        key="mark_remove_comments_client",
-                        disabled=not bool(client_c),
+                cols = ["Cliente"]
+                if "UserId" in orders_view.columns:
+                    cols.append("UserId")
+                if "ProfileId" in orders_view.columns:
+                    cols.append("ProfileId")
+                if "Hora" in orders_view.columns:
+                    cols.append("Hora")
+                cols += ["Produto", "Quantidade"]
+                if "Comentario" in orders_view.columns:
+                    cols.append("Comentario")
+
+                view = orders_view[cols].copy()
+                view["Cliente"] = view["Cliente"].astype(str).str.strip()
+                view["Produto"] = view["Produto"].astype(str).str.strip()
+                if "Comentario" in view.columns:
+                    view["Comentario"] = view["Comentario"].astype(str)
+
+                if "Comentario" not in view.columns:
+                    st.info("Não encontrei coluna de comentário no ficheiro. (Procurei: Comentário/Comment/Mensagem/OBS/Notas)")
+                else:
+                    clients = sorted(view["Cliente"].dropna().astype(str).unique().tolist())
+                    client_c = st.selectbox("Cliente", options=clients, key="comments_client_pick")
+                    vc = view[view["Cliente"].astype(str) == str(client_c)].copy()
+
+                    # Aggregate comments (some exports repeat per row)
+                    raw_comments = (
+                        vc["Comentario"]
+                        .dropna()
+                        .astype(str)
+                        .map(lambda s: s.strip())
+                        .replace({"nan": "", "None": ""})
                     )
-                with cbtn2:
-                    clear_pending = st.button(
-                        "Limpar lista",
-                        type="secondary",
-                        key="clear_remove_comments_list",
-                        disabled=not bool(pending),
-                    )
-                with cbtn3:
-                    apply_pending = st.button(
-                        "Aplicar alterações (remover comentários)",
-                        type="primary",
-                        key="apply_remove_comments_list",
-                        disabled=not bool(pending),
-                        help="Aplica todas as remoções de uma vez (evita refresh/recalcular a cada clique).",
-                    )
+                    raw_comments = [c for c in raw_comments.tolist() if c]
+                    combined = "\n\n---\n\n".join(dict.fromkeys(raw_comments)).strip()
 
-                if add_pending:
-                    pending.add(str(client_c))
-                    st.session_state["pending_comment_clear_clients"] = sorted(pending)
+                    st.text_area("Comentário(s)", value=combined or "—", height=200, disabled=True, key="comments_text")
+                    st.dataframe(vc, width="stretch")
 
-                if clear_pending:
-                    st.session_state["pending_comment_clear_clients"] = []
-                    pending = set()
-
-                if pending:
-                    st.caption(f"Marcados: **{len(pending)}** cliente(s) para remover comentários.")
-
-                if apply_pending:
-                    if "orders_draft" in st.session_state and isinstance(st.session_state["orders_draft"], pd.DataFrame):
-                        od = st.session_state["orders_draft"].copy()
-                        col_comment = "Comentário" if "Comentário" in od.columns else ("Comentario" if "Comentario" in od.columns else "")
-                        if not col_comment:
-                            st.warning("Não existe coluna de comentário no rascunho.")
-                        else:
-                            mask = od["Cliente"].astype(str).isin(list(pending))
-                            od.loc[mask, col_comment] = ""
-                            st.session_state["orders_draft"] = od
-                            st.session_state["pending_comment_clear_clients"] = []
-                            st.success("Alterações aplicadas.")
-                            st.rerun()
+                    # Batch mode: mark many clients, apply once
+                    st.session_state.setdefault("pending_comment_clear_clients", [])
+                    pending = set([str(x) for x in (st.session_state.get("pending_comment_clear_clients") or [])])
+                    if client_c:
+                        pending_hint = " (já marcado)" if str(client_c) in pending else ""
                     else:
-                        st.warning("Abra a aba 'Encomendas' para criar o rascunho antes de aplicar.")
+                        pending_hint = ""
 
-                st.caption("Dica: marque vários clientes e aplique no fim. Assim não 'saltas' de refresh a cada remoção.")
+                    cbtn1, cbtn2, cbtn3 = st.columns([1, 1, 2])
+                    with cbtn1:
+                        add_pending = st.button(
+                            f"Marcar para remover{pending_hint}",
+                            type="secondary",
+                            key="mark_remove_comments_client",
+                            disabled=not bool(client_c),
+                        )
+                    with cbtn2:
+                        clear_pending = st.button(
+                            "Limpar lista",
+                            type="secondary",
+                            key="clear_remove_comments_list",
+                            disabled=not bool(pending),
+                        )
+                    with cbtn3:
+                        apply_pending = st.button(
+                            "Aplicar alterações (remover comentários)",
+                            type="primary",
+                            key="apply_remove_comments_list",
+                            disabled=not bool(pending),
+                            help="Aplica todas as remoções de uma vez (evita refresh/recalcular a cada clique).",
+                        )
+
+                    if add_pending:
+                        pending.add(str(client_c))
+                        st.session_state["pending_comment_clear_clients"] = sorted(pending)
+
+                    if clear_pending:
+                        st.session_state["pending_comment_clear_clients"] = []
+                        pending = set()
+
+                    if pending:
+                        st.caption(f"Marcados: **{len(pending)}** cliente(s) para remover comentários.")
+
+                    if apply_pending:
+                        if "orders_draft" in st.session_state and isinstance(st.session_state["orders_draft"], pd.DataFrame):
+                            od = st.session_state["orders_draft"].copy()
+                            col_comment = "Comentário" if "Comentário" in od.columns else ("Comentario" if "Comentario" in od.columns else "")
+                            if not col_comment:
+                                st.warning("Não existe coluna de comentário no rascunho.")
+                            else:
+                                mask = od["Cliente"].astype(str).isin(list(pending))
+                                od.loc[mask, col_comment] = ""
+                                st.session_state["orders_draft"] = od
+                                st.session_state["pending_comment_clear_clients"] = []
+                                st.success("Alterações aplicadas.")
+                                st.rerun()
+                        else:
+                            st.warning("Abra a aba 'Encomendas' para criar o rascunho antes de aplicar.")
+
+                    st.caption("Dica: marque vários clientes e aplique no fim. Assim não 'saltas' de refresh a cada remoção.")
 
         if tab_upload is not None:
             with tab_upload:
                 _section("Mesa de encomendas", "Ajusta quantidades, exclui linhas e aplica alterações só quando estiver tudo validado.")
-                if orders_source_label:
-                    st.markdown(f"<div class='od-muted'>Fonte: <b>{orders_source_label}</b></div>", unsafe_allow_html=True)
-
                 # Build an editable view with standardized columns
                 orders_edit = _standardize_df_columns(orders_df)
                 orders_edit = _apply_aliases(orders_edit, ORDERS_ALIASES)
@@ -1774,14 +1796,25 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 if "Profile ID" in orders_edit.columns:
                     col_cfg["Profile ID"] = st.column_config.TextColumn("Profile ID", disabled=True)
 
-                st.markdown("<div class='od-card-h' style='margin-top:6px'>Rascunho operacional</div>", unsafe_allow_html=True)
-                st.caption("Edita livremente. O resumo, mensagens e etiquetas só mudam depois de aplicar.")
+                show_order_details = st.toggle(
+                    "Mostrar comentários, hora e IDs",
+                    key="orders_show_details",
+                    on_change=_change_orders_columns,
+                )
+                visible_order_columns = ["Incluir", "Cliente", "Referência", "Quantidade"]
+                if show_order_details:
+                    visible_order_columns += [
+                        col for col in ("Comentário", "Hora", "User ID", "Profile ID") if col in committed.columns
+                    ]
+                st.caption("Edita a quantidade ou desmarca «Incluir» para retirar uma linha das contas. Depois, aplica as alterações.")
 
                 with st.container(border=False):
                     edited_orders = st.data_editor(
                         st.session_state["orders_editor_base"],
                         width="stretch",
                         num_rows="fixed",
+                        hide_index=True,
+                        column_order=visible_order_columns,
                         column_config={
                             **col_cfg,
                         },
@@ -1795,6 +1828,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
                 # Keep working edits separate from committed orders
                 st.session_state["orders_working"] = edited_orders.copy()
+                if _orders_dirty():
+                    st.caption("● Tens alterações por aplicar. Os totais ainda usam os valores anteriores.")
 
                 if do_reset_orders:
                     st.session_state["orders_working"] = committed.copy()
@@ -2135,10 +2170,12 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     st.session_state["price_editor_base"],
                     width="stretch",
                     num_rows="fixed",
+                    hide_index=True,
+                    column_order=["Produto", "Preco"],
                     column_config={
                         "Produto": st.column_config.TextColumn("Referência", disabled=True),
-                        "ProdutoKey": st.column_config.TextColumn("Chave", disabled=True),
-                        "Preco": st.column_config.NumberColumn("Preço (€/m)", min_value=0.0, step=0.1, format="%.2f"),
+                        "ProdutoKey": None,
+                        "Preco": st.column_config.NumberColumn(f"Preço por unidade ({currency})", min_value=0.0, step=0.1, format="%.2f"),
                     },
                     key="all_prices_editor",
                 )
@@ -2157,6 +2194,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
             # keep draft updated (but don't apply yet)
             st.session_state["price_draft"] = edited.copy()
+            if _prices_dirty():
+                st.caption("● Tens preços por guardar. Guarda-os para atualizar os totais e as mensagens.")
 
             if do_save:
                 st.success("Preços guardados. As outras abas já usam estes valores.")
@@ -2164,7 +2203,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
             saved_count = len(st.session_state.get("price_overrides") or {})
             last_saved = st.session_state.get("prices_last_saved_at") or ""
-            st.caption(f"Guardados: **{saved_count}** referência(s)" + (f" · Última gravação: `{last_saved}`" if last_saved else ""))
+            saved_time = pd.Timestamp(last_saved).strftime("%d/%m às %H:%M UTC") if last_saved else ""
+            st.caption(f"Preços guardados: **{saved_count}** referência(s)" + (f" · {saved_time}" if saved_time else ""))
 
             overrides_df = pd.DataFrame(
                 [{"ProdutoKey": k, "Preco": v} for k, v in st.session_state["price_overrides"].items()]
@@ -2187,12 +2227,17 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
         clients_global = int(parsed.orders["Cliente"].dropna().astype(str).str.strip().nunique()) if "Cliente" in parsed.orders.columns else 0
         with workflow_status:
             st.caption(orders_source_label or "Direto atual")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Clientes", clients_global)
-            c2.metric("Referências", refs_global)
-            c3.metric("Linhas com preço", f"{priced_rows_global} / {total_rows_global}")
+            with st.container(key="workflow_metrics"):
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Clientes", clients_global)
+                c2.metric("Referências", refs_global)
+                c3.metric("Linhas com preço", f"{priced_rows_global} / {total_rows_global}")
+                confirmed_total = float(merged["TotalItem"].sum()) if "TotalItem" in merged.columns else 0.0
+                c4.metric("Total com preço", format_currency(confirmed_total, currency),
+                          help="Soma das linhas com preço guardado. As linhas sem preço ainda não entram neste valor.")
             if total_rows_global and priced_rows_global < total_rows_global:
-                st.warning("Há encomendas sem preço. Os totais e as mensagens ainda estão incompletos.")
+                missing_refs_count = int(merged.loc[merged["Preco"].isna(), "ProdutoKey"].nunique())
+                st.warning(f"Falta definir o preço de {missing_refs_count} referência(s). Os totais e as mensagens estão incompletos.")
                 if nav != "Preços":
                     st.button("Completar preços →", key="next_prices", on_click=_request_navigation, args=("Preços",))
             elif total_rows_global:
@@ -2209,25 +2254,10 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
             st.session_state["history_session_id"] = loaded.get("id") or safe_session_id(now_iso())
 
         still_missing = merged[merged["Preco"].isna()][["ProdutoKey", "Produto"]].drop_duplicates()
-        if not still_missing.empty:
-            st.info(
-                f"Ainda faltam preços para {len(still_missing)} referência(s). "
-                "Abre a etapa Preços para completar os valores em falta."
-            )
-            with st.expander("Diagnóstico preços", expanded=False):
-                try:
-                    order_keys = set(merged["ProdutoKey"].dropna().astype(str).tolist())
-                    override_keys = set((st.session_state.get("price_overrides") or {}).keys())
-                    st.write(
-                        {
-                            "refs_no_pedido": len(order_keys),
-                            "refs_com_preco_guardado": len(override_keys),
-                            "refs_que_casaram": len(order_keys.intersection(override_keys)),
-                            "exemplos_em_falta": still_missing.head(10).to_dict(orient="records"),
-                        }
-                    )
-                except Exception as e:
-                    st.write(f"Falha no diagnóstico: {e}")
+        if not still_missing.empty and nav == "Preços":
+            with st.expander(f"Referências sem preço ({len(still_missing)})", expanded=False):
+                st.dataframe(still_missing[["Produto"]].rename(columns={"Produto": "Referência"}),
+                             hide_index=True, width="stretch")
 
         by_client, details = build_summary(merged.dropna(subset=["Preco"]))
         file_ids_map: dict[str, dict[str, str]] = {}
@@ -2349,163 +2379,163 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                             unsafe_allow_html=True,
                         )
 
-                    # Action buttons: copy message + open FB inbox
-                    client_details = details.get(client)
-                    client_msg = build_message(
-                        client=client,
-                        details=client_details,
-                        total=client_total,
-                        currency=currency,
-                        intro=intro,
-                        outro=outro,
-                        total_line_template=total_line_template,
-                    )
-                    ids = client_ids_map.get(client, {})
-                    user_id = ids.get("user_id", "")
-                    profile_id = ids.get("profile_id", "")
-                    # Só abrimos chat direto quando temos UserId.
-                    chat_url = build_facebook_chat_url(user_id=user_id, profile_id="")
-                    profile_url = build_facebook_profile_url(user_id=user_id, profile_id=profile_id)
-                    inbox_base_url = f"https://business.facebook.com/latest/inbox/all/?asset_id={FB_PAGE_ID}&mailbox_id={FB_PAGE_ID}"
-                    chat_or_inbox_url = chat_url or inbox_base_url
-
-                    st.markdown("<div class='od-muted' style='margin-top:8px'><b>Ações</b></div>", unsafe_allow_html=True)
-                    a1, a2, a3, a4, a5 = st.columns([1.2, 1.1, 1.1, 1.5, 1.8])
-                    btn_key_base = _safe_dom_id("summary_client", client, tpl_ver)
-                    with a1:
-                        st.components.v1.html(
-                            f"""
-{_component_button_css()}
-<div>
-  <button type="button" class="od-copy-btn" id="copy_{btn_key_base}">
-    COPIAR MENSAGEM
-  </button>
-  <div class="od-copy-status" id="copystatus_{btn_key_base}"></div>
-</div>
-<script>
-(function() {{
-  const btn = document.getElementById("copy_{btn_key_base}");
-  const status = document.getElementById("copystatus_{btn_key_base}");
-  if (!btn || btn.dataset.bound === "1") return;
-  btn.dataset.bound = "1";
-  const text = {json.dumps(client_msg)};
-  btn.addEventListener("click", async () => {{
-    try {{
-      await navigator.clipboard.writeText(text);
-      if (status) {{
-        status.textContent = "Mensagem copiada!";
-        setTimeout(() => {{ status.textContent = ""; }}, 2000);
-      }}
-    }} catch (e) {{
-      if (status) status.textContent = "Falha ao copiar. (Permissões do browser)";
-    }}
-  }});
-}})();
-</script>
-""",
-                            height=90,
+                        # Action buttons: copy message + open FB inbox
+                        client_details = details.get(client)
+                        client_msg = build_message(
+                            client=client,
+                            details=client_details,
+                            total=client_total,
+                            currency=currency,
+                            intro=intro,
+                            outro=outro,
+                            total_line_template=total_line_template,
                         )
-                    with a2:
-                        if chat_url:
-                            st.link_button(
-                                "ABRIR CHAT",
-                                chat_or_inbox_url,
-                                width="stretch",
-                                key=f"open_chat_{btn_key_base}",
-                            )
-                        else:
-                            st.link_button(
-                                "ABRIR INBOX",
-                                chat_or_inbox_url,
-                                width="stretch",
-                                help="Sem UserID/ProfileID; abre o Inbox da página para pesquisar pelo nome.",
-                                key=f"open_inbox_{btn_key_base}",
-                            )
-                    with a3:
-                        if profile_url:
-                            st.link_button(
-                                "ABRIR PERFIL",
-                                profile_url,
-                                width="stretch",
-                                key=f"open_profile_{btn_key_base}",
-                            )
-                        else:
-                            st.link_button(
-                                "ABRIR PERFIL",
-                                "about:blank",
-                                width="stretch",
-                                disabled=True,
-                                key=f"open_profile_disabled_{btn_key_base}",
-                            )
-                    with a4:
-                        if chat_url:
+                        ids = client_ids_map.get(client, {})
+                        user_id = ids.get("user_id", "")
+                        profile_id = ids.get("profile_id", "")
+                        # Só abrimos chat direto quando temos UserId.
+                        chat_url = build_facebook_chat_url(user_id=user_id, profile_id="")
+                        profile_url = build_facebook_profile_url(user_id=user_id, profile_id=profile_id)
+                        inbox_base_url = f"https://business.facebook.com/latest/inbox/all/?asset_id={FB_PAGE_ID}&mailbox_id={FB_PAGE_ID}"
+                        chat_or_inbox_url = chat_url or inbox_base_url
+
+                        st.markdown("<div class='od-muted' style='margin-top:8px'><b>Ações</b></div>", unsafe_allow_html=True)
+                        a1, a2, a3, a4, a5 = st.columns([1.2, 1.1, 1.1, 1.5, 1.8])
+                        btn_key_base = _safe_dom_id("summary_client", client, tpl_ver)
+                        with a1:
                             st.components.v1.html(
                                 f"""
-{_component_button_css()}
-<div>
-  <button type="button" class="od-copy-btn" id="copyopen_{btn_key_base}">
-    COPIAR + ABRIR CHAT
-  </button>
-  <div class="od-copy-status" id="copyopenstatus_{btn_key_base}"></div>
-</div>
-<script>
-(function() {{
-  const btn = document.getElementById("copyopen_{btn_key_base}");
-  const status = document.getElementById("copyopenstatus_{btn_key_base}");
-  if (!btn || btn.dataset.bound === "1") return;
-  btn.dataset.bound = "1";
-  const text = {json.dumps(client_msg)};
-  const url = {json.dumps(chat_or_inbox_url)};
-  btn.addEventListener("click", async () => {{
-    try {{
-      await navigator.clipboard.writeText(text);
-      if (status) {{
-        status.textContent = "Mensagem copiada!";
-        setTimeout(() => {{ status.textContent = ""; }}, 2000);
-      }}
-    }} catch (e) {{
-      if (status) status.textContent = "Falha ao copiar. (Permissões do browser)";
-    }}
-    if (url) window.open(url, "_blank", "noopener,noreferrer");
-  }});
-}})();
-</script>
-""",
+    {_component_button_css()}
+    <div>
+      <button type="button" class="od-copy-btn" id="copy_{btn_key_base}">
+        COPIAR MENSAGEM
+      </button>
+      <div class="od-copy-status" id="copystatus_{btn_key_base}"></div>
+    </div>
+    <script>
+    (function() {{
+      const btn = document.getElementById("copy_{btn_key_base}");
+      const status = document.getElementById("copystatus_{btn_key_base}");
+      if (!btn || btn.dataset.bound === "1") return;
+      btn.dataset.bound = "1";
+      const text = {json.dumps(client_msg)};
+      btn.addEventListener("click", async () => {{
+        try {{
+          await navigator.clipboard.writeText(text);
+          if (status) {{
+            status.textContent = "Mensagem copiada!";
+            setTimeout(() => {{ status.textContent = ""; }}, 2000);
+          }}
+        }} catch (e) {{
+          if (status) status.textContent = "Falha ao copiar. (Permissões do browser)";
+        }}
+      }});
+    }})();
+    </script>
+    """,
                                 height=90,
                             )
-                        else:
-                            st.link_button(
-                                "COPIAR + ABRIR CHAT",
-                                "about:blank",
-                                width="stretch",
+                        with a2:
+                            if chat_url:
+                                st.link_button(
+                                    "ABRIR CHAT",
+                                    chat_or_inbox_url,
+                                    width="stretch",
+                                    key=f"open_chat_{btn_key_base}",
+                                )
+                            else:
+                                st.link_button(
+                                    "ABRIR INBOX",
+                                    chat_or_inbox_url,
+                                    width="stretch",
+                                    help="Sem UserID/ProfileID; abre o Inbox da página para pesquisar pelo nome.",
+                                    key=f"open_inbox_{btn_key_base}",
+                                )
+                        with a3:
+                            if profile_url:
+                                st.link_button(
+                                    "ABRIR PERFIL",
+                                    profile_url,
+                                    width="stretch",
+                                    key=f"open_profile_{btn_key_base}",
+                                )
+                            else:
+                                st.link_button(
+                                    "ABRIR PERFIL",
+                                    "about:blank",
+                                    width="stretch",
+                                    disabled=True,
+                                    key=f"open_profile_disabled_{btn_key_base}",
+                                )
+                        with a4:
+                            if chat_url:
+                                st.components.v1.html(
+                                    f"""
+    {_component_button_css()}
+    <div>
+      <button type="button" class="od-copy-btn" id="copyopen_{btn_key_base}">
+        COPIAR + ABRIR CHAT
+      </button>
+      <div class="od-copy-status" id="copyopenstatus_{btn_key_base}"></div>
+    </div>
+    <script>
+    (function() {{
+      const btn = document.getElementById("copyopen_{btn_key_base}");
+      const status = document.getElementById("copyopenstatus_{btn_key_base}");
+      if (!btn || btn.dataset.bound === "1") return;
+      btn.dataset.bound = "1";
+      const text = {json.dumps(client_msg)};
+      const url = {json.dumps(chat_or_inbox_url)};
+      btn.addEventListener("click", async () => {{
+        try {{
+          await navigator.clipboard.writeText(text);
+          if (status) {{
+            status.textContent = "Mensagem copiada!";
+            setTimeout(() => {{ status.textContent = ""; }}, 2000);
+          }}
+        }} catch (e) {{
+          if (status) status.textContent = "Falha ao copiar. (Permissões do browser)";
+        }}
+        if (url) window.open(url, "_blank", "noopener,noreferrer");
+      }});
+    }})();
+    </script>
+    """,
+                                    height=90,
+                                )
+                            else:
+                                st.link_button(
+                                    "COPIAR + ABRIR CHAT",
+                                    "about:blank",
+                                    width="stretch",
+                                    disabled=True,
+                                    key=f"copyopen_disabled_{btn_key_base}",
+                                )
+                        with a5:
+                            if user_id and profile_id:
+                                st.caption(f"User ID: `{user_id}` | Profile ID: `{profile_id}`")
+                            elif user_id:
+                                st.caption(f"User ID: `{user_id}`")
+                            elif profile_id:
+                                st.caption(f"Profile ID: `{profile_id}`")
+                            else:
+                                st.caption("User/Profile ID: —")
+
+                        msg_line = (total_line_template or "").replace("{total}", format_currency(client_total, currency))
+                        if msg_line.strip():
+                            st.text_area(
+                                "Mensagem rápida (copiar)",
+                                value=msg_line,
+                                height=70,
+                                key=f"quick_msg_{client}_{tpl_ver}",
                                 disabled=True,
-                                key=f"copyopen_disabled_{btn_key_base}",
                             )
-                    with a5:
-                        if user_id and profile_id:
-                            st.caption(f"User ID: `{user_id}` | Profile ID: `{profile_id}`")
-                        elif user_id:
-                            st.caption(f"User ID: `{user_id}`")
-                        elif profile_id:
-                            st.caption(f"Profile ID: `{profile_id}`")
-                        else:
-                            st.caption("User/Profile ID: —")
 
-                    msg_line = (total_line_template or "").replace("{total}", format_currency(client_total, currency))
-                    if msg_line.strip():
-                        st.text_area(
-                            "Mensagem rápida (copiar)",
-                            value=msg_line,
-                            height=70,
-                            key=f"quick_msg_{client}_{tpl_ver}",
-                            disabled=True,
-                        )
-
-                    # Display with prices/totals formatted
-                    d2 = details.get(client).copy()
-                    d2["Preco"] = d2["Preco"].map(lambda v: format_currency(float(v), currency))
-                    d2["TotalItem"] = d2["TotalItem"].map(lambda v: format_currency(float(v), currency))
-                    st.dataframe(d2, width="stretch")
+                        # Display with prices/totals formatted
+                        d2 = details.get(client).copy()
+                        d2["Preco"] = d2["Preco"].map(lambda v: format_currency(float(v), currency))
+                        d2["TotalItem"] = d2["TotalItem"].map(lambda v: format_currency(float(v), currency))
+                        st.dataframe(d2, width="stretch")
 
         if tab_messages is not None:
             with tab_messages:
@@ -2523,31 +2553,71 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
             if not details2:
                 st.stop()
 
-            allow_edit = st.checkbox("Permitir editar mensagem manualmente", value=False)
+            message_clients = by_client2["Cliente"].astype(str).tolist()
+            if st.session_state.get("messages_client_pick") not in message_clients:
+                st.session_state["messages_client_pick"] = message_clients[0]
+
+            def _move_message_client(offset: int) -> None:
+                current = st.session_state.get("messages_client_pick", message_clients[0])
+                current_index = message_clients.index(current) if current in message_clients else 0
+                target_index = max(0, min(len(message_clients) - 1, current_index + offset))
+                st.session_state["messages_client_pick"] = message_clients[target_index]
+
             client_selected = st.selectbox(
                 "Escolha um cliente",
-                options=by_client2["Cliente"].astype(str).tolist(),
+                options=message_clients,
+                key="messages_client_pick",
+            )
+            client_index = message_clients.index(client_selected)
+            previous_client, client_position, next_client = st.columns([1, 1, 1])
+            previous_client.button(
+                "← Anterior", key="messages_previous_client", width="stretch",
+                disabled=client_index == 0, on_click=_move_message_client, args=(-1,),
+            )
+            client_position.caption(f"Cliente {client_index + 1} de {len(message_clients)}")
+            next_client.button(
+                "Seguinte →", key="messages_next_client", width="stretch",
+                disabled=client_index == len(message_clients) - 1,
+                on_click=_move_message_client, args=(1,),
+            )
+            client_total = totals_map.get(client_selected, float(details2[client_selected]["TotalItem"].sum()))
+            client_refs = int(details2[client_selected]["Produto"].nunique())
+            st.markdown(
+                "<div class='od-card' style='display:flex;align-items:center;justify-content:space-between;"
+                "gap:1rem;flex-wrap:wrap;padding:1rem 1.2rem;margin:0.75rem 0'>"
+                f"<div><b>{html.escape(client_selected)}</b><div class='od-muted'>"
+                f"{client_refs} referência(s)</div></div>"
+                f"<div style='font-size:1.5rem;font-weight:750'>{format_currency(client_total, currency)}</div></div>",
+                unsafe_allow_html=True,
             )
             msg = build_message(
                 client=client_selected,
                 details=details2[client_selected],
-                total=totals_map.get(client_selected, float(details2[client_selected]["TotalItem"].sum())),
+                total=client_total,
                 currency=currency,
                 intro=intro,
                 outro=outro,
                 total_line_template=total_line_template,
             )
             tpl_ver = template_version(intro, total_line_template, outro)
+            message_version = hashlib.sha256(msg.encode("utf-8")).hexdigest()[:16]
+            allow_edit = st.checkbox("Permitir editar mensagem manualmente", value=False, key="messages_allow_edit")
             if allow_edit:
-                # when user edits manually, keep a stable key
-                st.text_area("Mensagem deste cliente", value=msg, height=220, key="single_client_msg_editable")
+                # A draft belongs to one client and one set of calculated items/totals.
+                draft_key = _safe_dom_id("single_client_msg_editable", client_selected, message_version)
+                message_drafts = st.session_state.setdefault("message_manual_drafts", {})
+                msg_to_copy = st.text_area(
+                    "Mensagem deste cliente", value=message_drafts.get(draft_key, msg), height=280,
+                    key=draft_key,
+                )
+                message_drafts[draft_key] = msg_to_copy
+                st.caption("O texto editado é usado ao copiar esta mensagem. O ficheiro com todas as mensagens mantém o resumo calculado.")
             else:
-                # disabled widgets update correctly when inputs change
-                st.text_area(
+                msg_to_copy = st.text_area(
                     "Mensagem deste cliente",
                     value=msg,
-                    height=220,
-                    key=f"single_client_msg_{client_selected}_{tpl_ver}",
+                    height=280,
+                    key=_safe_dom_id("single_client_msg", client_selected, message_version),
                     disabled=True,
                 )
 
@@ -2560,12 +2630,6 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
             profile_url = build_facebook_profile_url(user_id=user_id, profile_id=profile_id)
             inbox_base_url = f"https://business.facebook.com/latest/inbox/all/?asset_id={FB_PAGE_ID}&mailbox_id={FB_PAGE_ID}"
             chat_or_inbox_url = chat_url or inbox_base_url
-
-            msg_to_copy = (
-                str(st.session_state.get("single_client_msg_editable") or msg)
-                if allow_edit
-                else msg
-            )
 
             st.markdown("<div class='od-muted' style='margin-top:8px'><b>Ações</b></div>", unsafe_allow_html=True)
             m1, m2, m3, m4 = st.columns([1.2, 1.1, 1.1, 1.5])
@@ -2713,8 +2777,6 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     st.success("Guardado (ficheiro local + base de dados, se configurada).")
                     st.rerun()
 
-            st.divider()
-            _section("Texto final", "Bloco único com todas as mensagens prontas para arquivo ou envio manual.")
             text_blocks: list[str] = []
             for client, d in details2.items():
                 text_blocks.append(
@@ -2729,13 +2791,15 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     )
                 )
             final_text = "\n".join(text_blocks).strip() + "\n"
-            st.text_area(
-                "Pronto para copiar",
-                value=final_text,
-                height=320,
-                key=f"final_text_{tpl_ver}",
-                disabled=True,
-            )
+            with st.expander(f"Todas as mensagens · {len(message_clients)} clientes", expanded=False):
+                st.caption("Bloco completo com os resumos calculados, pronto para copiar ou guardar em ficheiro.")
+                st.text_area(
+                    "Pronto para copiar",
+                    value=final_text,
+                    height=320,
+                    key=_safe_dom_id("final_text", final_text),
+                    disabled=True,
+                )
 
         if tab_labels is not None:
             with tab_labels:
@@ -2849,11 +2913,15 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 )
 
             html = ol.build_labels_html(blocks)
+            st.caption(f"**{len(blocks)} de {len(edited_labels)} etiquetas selecionadas**")
+            if not blocks:
+                st.info("Marca as linhas na coluna «Imprimir» ou escolhe «Todas» para preparar as etiquetas.")
             st.download_button(
                 "Descarregar etiquetas (HTML)",
                 data=html.encode("utf-8"),
                 file_name="etiquetas_10x15.html",
                 mime="text/html",
+                disabled=not bool(blocks),
             )
             with st.expander("Pré-visualização", expanded=False):
                 st.components.v1.html(html, height=650, scrolling=True)
@@ -2869,7 +2937,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
             "last_updated": pd.Timestamp.utcnow().isoformat(),
         }
         save_local_state(STATE_PATH, local)
-        st.caption(f"Salvo localmente em `{STATE_PATH}`")
+        st.caption("Resultados atualizados neste dispositivo.")
 
         # Downloads / export: show on relevant pages only
         if tab_messages is not None:
