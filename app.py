@@ -13,6 +13,7 @@ import streamlit as st
 
 from organizer import core as oc
 from organizer import db as odb
+from organizer import editor_views as oev
 from organizer import facebook as ofb
 from organizer import labels as ol
 from organizer import storage_local as osl
@@ -440,6 +441,7 @@ def _reset_order_workspace() -> None:
         "loaded_session", "session_label",
         "message_manual_drafts",
         "session_save_feedback", "session_save_error",
+        "orders_search", "orders_scope", "prices_search", "prices_missing_only",
     ):
         st.session_state.pop(key, None)
 
@@ -568,11 +570,30 @@ def _reset_orders_editor() -> None:
 
 
 def _change_orders_columns() -> None:
-    # Changing the visible columns recreates the widget; retain its working edits.
+    # Rebase before changing the editor view so its widget retains working edits.
     working = st.session_state.get("orders_working")
     if isinstance(working, pd.DataFrame):
         st.session_state["orders_editor_base"] = working.copy()
     st.session_state.pop("comments_editor", None)
+
+
+def _clear_orders_filters() -> None:
+    _change_orders_columns()
+    st.session_state["orders_search"] = ""
+    st.session_state["orders_scope"] = "Todas"
+
+
+def _change_prices_view() -> None:
+    draft = st.session_state.get("price_draft")
+    if isinstance(draft, pd.DataFrame):
+        st.session_state["price_editor_base"] = draft.copy()
+    st.session_state.pop("all_prices_editor", None)
+
+
+def _clear_prices_filters() -> None:
+    _change_prices_view()
+    st.session_state["prices_search"] = ""
+    st.session_state["prices_missing_only"] = False
 
 
 def _reset_prices_editor() -> None:
@@ -1928,6 +1949,21 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 if "Profile ID" in orders_edit.columns:
                     col_cfg["Profile ID"] = st.column_config.TextColumn("Profile ID", disabled=True)
 
+                search_col, scope_col = st.columns([3, 2])
+                with search_col:
+                    orders_search = st.text_input(
+                        "Pesquisar encomendas",
+                        key="orders_search",
+                        on_change=_change_orders_columns,
+                        placeholder="Cliente, referência ou comentário…",
+                    )
+                with scope_col:
+                    orders_scope = st.selectbox(
+                        "Linhas a mostrar",
+                        ["Todas", "Incluídas", "Excluídas"],
+                        key="orders_scope",
+                        on_change=_change_orders_columns,
+                    )
                 show_order_details = st.toggle(
                     "Mostrar comentários, hora e IDs",
                     key="orders_show_details",
@@ -1940,26 +1976,39 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     ]
                 st.caption("Edita a quantidade ou desmarca «Incluir» para retirar uma linha das contas. Depois, aplica as alterações.")
 
+                orders_editor_base = st.session_state["orders_editor_base"]
+                orders_view = oev.filter_rows(
+                    orders_editor_base, orders_search, ["Cliente", "Referência", "Comentário"]
+                )
+                if orders_scope != "Todas":
+                    included = orders_view["Incluir"].fillna(True).astype(bool)
+                    orders_view = orders_view.loc[included if orders_scope == "Incluídas" else ~included].copy()
+                st.caption(f"A mostrar **{len(orders_view)}** de **{len(orders_editor_base)}** linhas.")
+                if orders_search or orders_scope != "Todas":
+                    st.button("Limpar filtros", key="orders_clear_filters", on_click=_clear_orders_filters)
+
                 with st.container(border=False):
-                    edited_orders = st.data_editor(
-                        st.session_state["orders_editor_base"],
-                        width="stretch",
-                        num_rows="fixed",
-                        hide_index=True,
-                        column_order=visible_order_columns,
-                        column_config={
-                            **col_cfg,
-                        },
-                        key="comments_editor",
-                    )
+                    if orders_view.empty:
+                        st.info("Nenhuma encomenda corresponde aos filtros. Limpa os filtros para voltar a ver todas as linhas.")
+                    else:
+                        edited_orders = st.data_editor(
+                            orders_view,
+                            width="stretch",
+                            num_rows="fixed",
+                            hide_index=True,
+                            column_order=visible_order_columns,
+                            column_config=col_cfg,
+                            key="comments_editor",
+                        )
+                        st.session_state["orders_working"] = oev.merge_rows(
+                            st.session_state["orders_working"], edited_orders
+                        )
                     b1, b2, _ = st.columns([1, 1, 2])
                     with b1:
                         do_apply_orders = st.button("Aplicar alterações", type="primary", on_click=_commit_orders_editor)
                     with b2:
                         do_reset_orders = st.button("Repor (voltar ao guardado)", on_click=_reset_orders_editor)
 
-                # Keep working edits separate from committed orders
-                st.session_state["orders_working"] = edited_orders.copy()
                 if _orders_dirty():
                     st.caption("● Tens alterações por aplicar. Os totais ainda usam os valores anteriores.")
 
@@ -1969,7 +2018,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     st.rerun()
 
                 if do_apply_orders:
-                    st.session_state["orders_draft"] = edited_orders.copy()
+                    st.session_state["orders_draft"] = st.session_state["orders_working"].copy()
                     committed = st.session_state["orders_draft"].copy()
                     st.success("Alterações aplicadas.")
                     st.rerun()
@@ -2225,20 +2274,49 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
             if "price_editor_base" not in st.session_state:
                 st.session_state["price_editor_base"] = st.session_state["price_draft"].copy()
-            with st.container(border=False):
-                edited = st.data_editor(
-                    st.session_state["price_editor_base"],
-                    width="stretch",
-                    num_rows="fixed",
-                    hide_index=True,
-                    column_order=["Produto", "Preco"],
-                    column_config={
-                        "Produto": st.column_config.TextColumn("Referência", disabled=True),
-                        "ProdutoKey": None,
-                        "Preco": st.column_config.NumberColumn(f"Preço por unidade ({currency})", min_value=0.0, step=0.1, format="%.2f"),
-                    },
-                    key="all_prices_editor",
+
+            search_col, missing_col = st.columns([3, 2])
+            with search_col:
+                prices_search = st.text_input(
+                    "Pesquisar referência",
+                    key="prices_search",
+                    on_change=_change_prices_view,
+                    placeholder="Escreve parte da referência…",
                 )
+            with missing_col:
+                prices_missing_only = st.toggle(
+                    "Só referências sem preço",
+                    key="prices_missing_only",
+                    on_change=_change_prices_view,
+                )
+
+            price_editor_base = st.session_state["price_editor_base"]
+            price_view = oev.filter_rows(price_editor_base, prices_search, ["Produto", "ProdutoKey"])
+            if prices_missing_only:
+                price_view = price_view.loc[price_view["Preco"].isna()].copy()
+            st.caption(f"A mostrar **{len(price_view)}** de **{len(price_editor_base)}** referências.")
+            if prices_search or prices_missing_only:
+                st.button("Limpar filtros", key="prices_clear_filters", on_click=_clear_prices_filters)
+
+            with st.container(border=False):
+                if price_view.empty:
+                    st.info("Nenhuma referência corresponde aos filtros. Altera a pesquisa ou desativa o filtro de preços.")
+                else:
+                    edited = st.data_editor(
+                        price_view,
+                        width="stretch",
+                        num_rows="fixed",
+                        hide_index=True,
+                        column_order=["Produto", "Preco"],
+                        column_config={
+                            "Produto": st.column_config.TextColumn("Referência", disabled=True),
+                            "ProdutoKey": None,
+                            "Preco": st.column_config.NumberColumn(f"Preço por unidade ({currency})", min_value=0.0, step=0.1, format="%.2f"),
+                        },
+                        key="all_prices_editor",
+                    )
+                    # Retain prices edited outside the current filtered view.
+                    st.session_state["price_draft"] = oev.merge_rows(st.session_state["price_draft"], edited)
 
                 c1, c2, c3 = st.columns([1, 1, 2])
                 with c1:
@@ -2252,8 +2330,6 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 st.session_state["price_draft"] = price_table[["Produto", "ProdutoKey", "Preco"]].copy()
                 st.rerun()
 
-            # keep draft updated (but don't apply yet)
-            st.session_state["price_draft"] = edited.copy()
             if _prices_dirty():
                 st.caption("● Tens preços por guardar. Guarda-os para atualizar os totais e as mensagens.")
 
