@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 from typing import Any
 
 import pandas as pd
@@ -42,7 +43,7 @@ def build_session_payload(
     *, label: str, orders_for_calc: pd.DataFrame, price_overrides: dict, meta: dict
 ) -> tuple[str, dict[str, Any]]:
     created_at = now_iso()
-    sid = safe_session_id(created_at)
+    sid = f"{safe_session_id(created_at)}_{uuid.uuid4().hex[:8]}"
 
     orders_clean = orders_for_calc.copy()
     orders_clean = standardize_df_columns(orders_clean)
@@ -90,4 +91,3 @@ def load_session(session_path: str) -> dict[str, Any]:
 
 def delete_session(session_path: str) -> None:
     os.remove(session_path)
-

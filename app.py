@@ -439,6 +439,7 @@ def _reset_order_workspace() -> None:
         "history_session_id", "_ids_bulk_fp", "_ids_bulk_map", "uploaded_input_cache",
         "loaded_session", "session_label",
         "message_manual_drafts",
+        "session_save_feedback", "session_save_error",
     ):
         st.session_state.pop(key, None)
 
@@ -450,6 +451,17 @@ def _activate_session(data: dict) -> None:
     st.session_state["price_overrides"] = dict(data.get("price_overrides") or {})
     st.session_state["session_label"] = data.get("label") or ""
     st.session_state["history_session_id"] = data.get("id") or safe_session_id(now_iso())
+    meta = data.get("meta") or {}
+    preferences = meta.get("preferences") or {}
+    if preferences.get("currency") in {"EUR", "BRL", "USD"}:
+        st.session_state["currency"] = preferences["currency"]
+    for key in ("intro", "total_line_template", "outro"):
+        if isinstance(preferences.get(key), str):
+            st.session_state[key] = preferences[key]
+    if isinstance(preferences.get("fill_missing_qty"), bool):
+        st.session_state["fill_missing_qty"] = preferences["fill_missing_qty"]
+    if isinstance(meta.get("message_manual_drafts"), dict):
+        st.session_state["message_manual_drafts"] = meta["message_manual_drafts"]
     st.session_state["open_session_navigation"] = True
 
 
@@ -506,6 +518,29 @@ def _commit_orders_editor() -> None:
         st.session_state["orders_draft"] = working.copy()
         st.session_state["orders_editor_base"] = working.copy()
     st.session_state.pop("comments_editor", None)
+
+
+def _commit_comment_removals() -> None:
+    # Remove comments from both versions without committing other pending edits.
+    for key in ("orders_draft", "orders_working"):
+        frame = st.session_state.get(key)
+        if isinstance(frame, pd.DataFrame):
+            st.session_state[key] = _apply_pending_comment_removals_to_df(frame)
+    working = st.session_state.get("orders_working")
+    if isinstance(working, pd.DataFrame):
+        st.session_state["orders_editor_base"] = working.copy()
+    st.session_state.pop("comments_editor", None)
+    st.session_state["pending_comment_clear_clients"] = []
+
+
+def _mark_comment_removal(client: str) -> None:
+    pending = set(st.session_state.get("pending_comment_clear_clients") or [])
+    pending.add(str(client))
+    st.session_state["pending_comment_clear_clients"] = sorted(pending)
+
+
+def _clear_comment_removals() -> None:
+    st.session_state["pending_comment_clear_clients"] = []
 
 
 def _commit_prices_editor() -> None:
@@ -584,6 +619,62 @@ def _build_orders_for_calc_from_state(*, orders_df: pd.DataFrame) -> pd.DataFram
     base = _apply_aliases(base, ORDERS_ALIASES)
     _validate_required_cols(base, REQUIRED_ORDERS_COLS, "Encomendas (Comments)")
     return base.copy()
+
+
+def _save_workspace_session(orders_df: pd.DataFrame, source: str) -> None:
+    st.session_state.pop("session_save_error", None)
+    try:
+        _save_all_pending_changes()
+        orders = _build_orders_for_calc_from_state(orders_df=orders_df)
+        if orders.empty:
+            st.session_state["session_save_error"] = "Não há encomendas incluídas para guardar. Inclui pelo menos uma linha na tabela."
+            return
+        label = str(st.session_state.get("session_label") or "").strip()
+        if not label:
+            label = "Direto " + pd.Timestamp.now(tz="Europe/Lisbon").strftime("%d/%m/%Y às %H:%M")
+        st.session_state["session_label"] = label
+        preferences = {key: st.session_state.get(key) for key in (
+            "currency", "fill_missing_qty", "intro", "total_line_template", "outro",
+        )}
+        sid, payload = save_session(
+            label=label,
+            orders_for_calc=orders,
+            price_overrides=st.session_state.get("price_overrides") or {},
+            meta={"source": source, "preferences": preferences,
+                  "message_manual_drafts": st.session_state.get("message_manual_drafts") or {}},
+        )
+    except Exception:
+        logger.exception("Não foi possível guardar a sessão.")
+        st.session_state["session_save_error"] = "Não consegui guardar a sessão. As alterações continuam abertas; tenta novamente."
+        return
+
+    warnings = []
+    try:
+        eng = _db_engine()
+        odb.save_session_payload(eng, payload)
+    except Exception:
+        logger.warning("Sessão guardada localmente, mas falhou a cópia na base de dados.", exc_info=True)
+        warnings.append("A sessão ficou guardada neste dispositivo, mas não consegui sincronizar a cópia na base de dados.")
+    try:
+        local_state = load_local_state(STATE_PATH)
+        local_ids = local_state.get("client_ids") or {}
+        if not isinstance(local_ids, dict):
+            local_ids = {}
+        base_ids = _client_ids_from_orders_df(orders)
+        bulk = odb.get_customer_ids_bulk(_db_engine(), clientes=list(base_ids))
+        merged_ids = _merge_ids_fill_missing(base_ids, local_ids, bulk)
+        local_state["client_ids"] = {**local_ids, **merged_ids}
+        save_local_state(STATE_PATH, local_state)
+        rows = [(name, ids.get("user_id", ""), ids.get("profile_id", "")) for name, ids in merged_ids.items()
+                if ids.get("user_id") or ids.get("profile_id")]
+        if rows:
+            odb.upsert_customer_ids_bulk(_db_engine(), rows=rows)
+    except Exception:
+        logger.warning("Sessão guardada, mas não foi possível atualizar o diretório de clientes.", exc_info=True)
+        warnings.append("A sessão foi guardada, mas não consegui atualizar o diretório de clientes.")
+    st.session_state["history_session_id"] = sid
+    st.session_state["session_save_feedback"] = {"label": label, "created_at": payload["created_at"], "warnings": warnings}
+    st.toast(f"Direto «{label}» guardado.", icon="✅")
 
 
 def _secrets_safe_get(key: str, default: str = "") -> str:
@@ -1393,67 +1484,126 @@ if nav == "Definições":
     st.session_state["outro"] = st.text_input("Fecho", value=outro)
 
 elif nav == "Histórico":
-    _section("Sessões guardadas", "Abre ou elimina sessões locais e sessões guardadas na base de dados.")
+    _section("Sessões guardadas", "Encontra um direto anterior e continua de onde ficaste.")
+    history_notice = st.session_state.pop("history_notice", "")
+    if history_notice:
+        st.success(history_notice)
+    history_warning = st.session_state.pop("history_warning", "")
+    if history_warning:
+        st.warning(history_warning)
     sessions = _merged_session_rows()
     if not sessions:
-        st.info("Ainda não há sessões guardadas.")
+        st.info("Ainda não há sessões guardadas. Importa as encomendas e guarda o teu primeiro direto para o retomares aqui.")
     else:
-        sessions_df = pd.DataFrame(sessions)[["created_at", "label", "orders_rows", "refs", "path"]]
-        sessions_df = sessions_df.rename(
-            columns={
-                "created_at": "Data (UTC)",
-                "label": "Nome",
-                "orders_rows": "Linhas",
-                "refs": "Referências",
-                "path": "Arquivo",
-            }
-        )
-        show_df = sessions_df.drop(columns=["Arquivo"]).copy()
-        if _is_postgres_engine(_db_engine()):
-            show_df.insert(0, "Onde", sessions_df["Arquivo"].map(lambda p: "Nuvem (BD)" if str(p).startswith("db:") else "Local"))
-        st.dataframe(show_df, width="stretch")
+        def _history_date(value: object) -> str:
+            timestamp = pd.to_datetime(value, utc=True, errors="coerce")
+            if pd.isna(timestamp):
+                return "Data indisponível"
+            return timestamp.tz_convert("Europe/Lisbon").strftime("%d/%m/%Y às %H:%M:%S")
 
-        chosen = st.selectbox(
-            "Abrir sessão",
-            options=sessions,
-            format_func=lambda s: f"{s['created_at']} — {s['label'] or s['id']}",
-        )
-        c1, c2 = st.columns([1, 1])
-        with c1:
-            if st.button("Abrir", type="primary"):
-                p = str(chosen.get("path") or "")
-                try:
-                    if p.startswith("db:"):
-                        sid = p.split(":", 1)[1]
-                        data = odb.get_session_payload(_db_engine(), session_id=sid) or {}
-                    else:
-                        data = load_session(p)
-                    if not data.get("orders"):
-                        st.error("Sessão vazia ou não encontrada.")
-                    else:
-                        _activate_session(data)
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"Falha ao abrir: {e}")
-        with c2:
-            with st.popover("Apagar sessão"):
-                st.warning("Isto apaga esta sessão (local e/ou na base de dados). Não dá para recuperar.")
-                confirm = st.checkbox("Confirmo que quero apagar", value=False, key="confirm_delete_session")
-                if st.button("Apagar definitivamente", type="secondary", disabled=not confirm):
+        history_query = st.text_input(
+            "Pesquisar sessões", placeholder="Nome do direto ou identificador",
+            key="history_search",
+        ).strip().casefold()
+        matching_sessions = [
+            session for session in sessions
+            if not history_query or history_query in str(session.get("label") or "").casefold()
+            or history_query in str(session.get("id") or "").casefold()
+        ]
+        st.caption(f"{len(matching_sessions)} de {len(sessions)} sessões · Mais recentes primeiro · Hora de Lisboa")
+        if not matching_sessions:
+            st.info("Não encontrei sessões para esta pesquisa. Experimenta outro nome ou limpa a pesquisa.")
+        else:
+            if st.session_state.get("history_session_pick") not in matching_sessions:
+                st.session_state["history_session_pick"] = matching_sessions[0]
+            history_option_labels = {
+                str(session.get("id")): (
+                    f"Gravação {index + 1} · {session.get('label') or 'Direto sem nome'}"
+                    f" · {_history_date(session.get('created_at'))}"
+                )
+                for index, session in enumerate(matching_sessions)
+            }
+            chosen = st.selectbox(
+                "Abrir sessão",
+                options=matching_sessions,
+                format_func=lambda s: history_option_labels[str(s.get("id"))],
+                key="history_session_pick",
+            )
+            session_name = str(chosen.get("label") or "Direto sem nome")
+            session_location = (
+                "Na nuvem" if str(chosen.get("path") or "").startswith("db:") and _is_postgres_engine(_db_engine())
+                else "Neste dispositivo"
+            )
+            st.markdown(
+                "<div class='od-card' style='padding:1rem 1.2rem;margin:0.5rem 0'>"
+                f"<b>{html.escape(session_name)}</b>"
+                f"<div class='od-muted'>{_history_date(chosen.get('created_at'))} · {session_location}</div>"
+                f"<div style='margin-top:0.5rem'>{int(chosen.get('orders_rows') or 0)} linhas de encomenda"
+                f" · {int(chosen.get('refs') or 0)} referências</div></div>",
+                unsafe_allow_html=True,
+            )
+            c1, c2 = st.columns([1, 1])
+            with c1:
+                if st.button("Abrir", type="primary", width="stretch"):
+                    p = str(chosen.get("path") or "")
                     try:
-                        p = str(chosen.get("path") or "")
                         if p.startswith("db:"):
                             sid = p.split(":", 1)[1]
-                            odb.delete_session_by_id(_db_engine(), session_id=sid)
+                            data = odb.get_session_payload(_db_engine(), session_id=sid) or {}
                         else:
-                            delete_session(p)
-                        loaded = st.session_state.get("loaded_session") or {}
-                        if loaded.get("id") == chosen.get("id"):
-                            st.session_state.pop("loaded_session", None)
-                        st.success("Sessão apagada.")
-                        st.rerun()
+                            data = load_session(p)
+                        if not data.get("orders"):
+                            st.error("Sessão vazia ou não encontrada.")
+                        else:
+                            _activate_session(data)
+                            st.rerun()
                     except Exception as e:
-                        st.error(f"Falha ao apagar: {e}")
+                        st.error(f"Falha ao abrir: {e}")
+            with c2:
+                with st.popover("Apagar sessão", width="stretch"):
+                    st.warning(f"Vais apagar «{session_name}». Esta ação não pode ser desfeita.")
+                    confirm = st.checkbox(
+                        "Confirmo que quero apagar", value=False,
+                        key=_safe_dom_id("confirm_delete_session", chosen.get("id")),
+                    )
+                    if st.button("Apagar definitivamente", type="secondary", disabled=not confirm):
+                        sid = str(chosen.get("id") or "")
+                        removal_errors: list[str] = []
+                        # One saved snapshot can have both a JSON file and a DB copy.
+                        # Remove only copies of this id; other versions keep their files.
+                        local_copies = {
+                            str(session.get("path") or "") for session in list_sessions()
+                            if str(session.get("id") or "") == sid
+                        }
+                        selected_path = str(chosen.get("path") or "")
+                        if selected_path and not selected_path.startswith("db:"):
+                            local_copies.add(selected_path)
+                        try:
+                            odb.delete_session_by_id(_db_engine(), session_id=sid)
+                        except Exception:
+                            logger.warning("Não foi possível apagar a cópia da sessão na base de dados.", exc_info=True)
+                            removal_errors.append("base de dados")
+                        for session_path in local_copies:
+                            if not session_path:
+                                continue
+                            try:
+                                if os.path.exists(session_path):
+                                    delete_session(session_path)
+                            except Exception:
+                                logger.warning("Não foi possível apagar uma cópia local da sessão.", exc_info=True)
+                                removal_errors.append("dispositivo")
+                        if removal_errors:
+                            failed_locations = " e ".join(dict.fromkeys(removal_errors))
+                            st.session_state["history_warning"] = (
+                                f"Não foi possível apagar todas as cópias de «{session_name}» ({failed_locations}). "
+                                "Algumas cópias podem ter sido removidas. Tenta novamente."
+                            )
+                        else:
+                            loaded = st.session_state.get("loaded_session") or {}
+                            if loaded.get("id") == chosen.get("id"):
+                                st.session_state.pop("loaded_session", None)
+                            st.session_state["history_notice"] = f"Sessão «{session_name}» apagada."
+                        st.rerun()
 
 else:
     # If a session was loaded, we can work without uploading again.
@@ -1676,7 +1826,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                             f"Marcar para remover{pending_hint}",
                             type="secondary",
                             key="mark_remove_comments_client",
-                            disabled=not bool(client_c),
+                            disabled=not bool(client_c) or str(client_c) in pending,
+                            on_click=_mark_comment_removal, args=(client_c,),
                         )
                     with cbtn2:
                         clear_pending = st.button(
@@ -1684,6 +1835,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                             type="secondary",
                             key="clear_remove_comments_list",
                             disabled=not bool(pending),
+                            on_click=_clear_comment_removals,
                         )
                     with cbtn3:
                         apply_pending = st.button(
@@ -1691,35 +1843,15 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                             type="primary",
                             key="apply_remove_comments_list",
                             disabled=not bool(pending),
+                            on_click=_commit_comment_removals,
                             help="Aplica todas as remoções de uma vez (evita refresh/recalcular a cada clique).",
                         )
-
-                    if add_pending:
-                        pending.add(str(client_c))
-                        st.session_state["pending_comment_clear_clients"] = sorted(pending)
-
-                    if clear_pending:
-                        st.session_state["pending_comment_clear_clients"] = []
-                        pending = set()
 
                     if pending:
                         st.caption(f"Marcados: **{len(pending)}** cliente(s) para remover comentários.")
 
                     if apply_pending:
-                        if "orders_draft" in st.session_state and isinstance(st.session_state["orders_draft"], pd.DataFrame):
-                            od = st.session_state["orders_draft"].copy()
-                            col_comment = "Comentário" if "Comentário" in od.columns else ("Comentario" if "Comentario" in od.columns else "")
-                            if not col_comment:
-                                st.warning("Não existe coluna de comentário no rascunho.")
-                            else:
-                                mask = od["Cliente"].astype(str).isin(list(pending))
-                                od.loc[mask, col_comment] = ""
-                                st.session_state["orders_draft"] = od
-                                st.session_state["pending_comment_clear_clients"] = []
-                                st.success("Alterações aplicadas.")
-                                st.rerun()
-                        else:
-                            st.warning("Abra a aba 'Encomendas' para criar o rascunho antes de aplicar.")
+                        st.success("Comentários removidos. As restantes edições continuam no rascunho.")
 
                     st.caption("Dica: marque vários clientes e aplique no fim. Assim não 'saltas' de refresh a cada remoção.")
 
@@ -1855,78 +1987,6 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     orders_for_calc = orders_for_calc[orders_for_calc["Incluir"].fillna(True)].copy()
                     orders_for_calc = orders_for_calc.drop(columns=["Incluir"], errors="ignore")
 
-                st.divider()
-                _section("Guardar sessão", "Grava o direto atual para recuperar encomendas, preços e IDs mais tarde.")
-                c1, c2 = st.columns([2, 1])
-                with c1:
-                    session_label = st.text_input(
-                        "Nome da sessão",
-                        value=(st.session_state.get("session_label") or ""),
-                        placeholder="Ex.: Encomendas 14-04",
-                    )
-                    st.session_state["session_label"] = session_label
-                with c2:
-                    if st.button("Guardar sessão", type="primary"):
-                        if "price_overrides" not in st.session_state:
-                            st.session_state["price_overrides"] = {}
-                        eng = _db_engine()
-                        local_st = load_local_state(STATE_PATH)
-                        local_dir = local_st.get("client_ids") or {}
-                        if not isinstance(local_dir, dict):
-                            local_dir = {}
-                        base_ids = _client_ids_from_orders_df(orders_for_calc)
-                        bulk: dict[str, dict[str, str]] = {}
-                        try:
-                            bulk = odb.get_customer_ids_bulk(eng, clientes=list(base_ids.keys()))
-                        except Exception:
-                            logger.warning("Não foi possível carregar IDs em lote ao guardar sessão.", exc_info=True)
-                            bulk = {}
-                        merged_ids = _merge_ids_fill_missing(base_ids, local_dir, bulk)
-                        sid, payload = save_session(
-                            label=session_label.strip(),
-                            orders_for_calc=orders_for_calc,
-                            price_overrides=st.session_state.get("price_overrides") or {},
-                            meta={"source": orders_source_label or ""},
-                        )
-                        try:
-                            odb.save_session_payload(eng, payload)
-                        except Exception as e:
-                            st.warning(f"Não gravei a sessão na base de dados: {e}")
-                        rows_up: list[tuple[str, str, str]] = []
-                        for nome, ids in merged_ids.items():
-                            u = (ids.get("user_id") or "").strip()
-                            p = (ids.get("profile_id") or "").strip()
-                            if u or p:
-                                rows_up.append((str(nome).strip(), u, p))
-                        if rows_up:
-                            try:
-                                odb.upsert_customer_ids_bulk(eng, rows=rows_up)
-                            except Exception as e:
-                                st.warning(f"Não atualizei os IDs na base de dados: {e}")
-                        try:
-                            local_st2 = load_local_state(STATE_PATH)
-                            local_st2.setdefault("client_ids", {})
-                            for nome, ids in merged_ids.items():
-                                k = str(nome).strip()
-                                if not k:
-                                    continue
-                                u = (ids.get("user_id") or "").strip()
-                                p = (ids.get("profile_id") or "").strip()
-                                if not u and not p:
-                                    continue
-                                prev = local_st2["client_ids"].get(k) or {}
-                                out_u = str(prev.get("user_id") or "").strip()
-                                out_p = str(prev.get("profile_id") or "").strip()
-                                if u:
-                                    out_u = u
-                                if p:
-                                    out_p = p
-                                local_st2["client_ids"][k] = {"user_id": out_u, "profile_id": out_p}
-                            save_local_state(STATE_PATH, local_st2)
-                        except Exception as e:
-                            logger.warning("Não foi possível guardar IDs no estado local.", exc_info=True)
-                            st.warning(f"Sessão guardada, mas não atualizei os IDs no ficheiro local: {e}")
-                        st.success(f"Sessão guardada: {sid} (ficheiro local + base de dados, se configurada).")
 
         # Ensure this exists on all pages (Preços/Mensagens/Etiquetas) even if Encomendas page wasn't opened.
         orders_for_calc = _build_orders_for_calc_from_state(orders_df=orders_df)
@@ -2226,7 +2286,24 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
         refs_global = int(merged["ProdutoKey"].nunique()) if "ProdutoKey" in merged.columns else 0
         clients_global = int(parsed.orders["Cliente"].dropna().astype(str).str.strip().nunique()) if "Cliente" in parsed.orders.columns else 0
         with workflow_status:
-            st.caption(orders_source_label or "Direto atual")
+            source_col, save_col = st.columns([3, 1])
+            with source_col:
+                st.caption(orders_source_label or "Direto atual")
+                feedback = st.session_state.get("session_save_feedback") or {}
+                if feedback:
+                    saved_time = pd.Timestamp(feedback["created_at"]).tz_convert("Europe/Lisbon").strftime("%d/%m às %H:%M")
+                    st.caption(f"Última gravação: {saved_time} · {feedback['label']}")
+            with save_col:
+                with st.popover("Guardar direto", width="stretch"):
+                    st.text_input("Nome da sessão", key="session_label", placeholder="Ex.: Direto de domingo")
+                    st.caption("Guarda encomendas, preços, mensagens personalizadas e preferências. Inclui as alterações pendentes.")
+                    st.button("Guardar sessão", key="save_workspace_session", type="primary", width="stretch",
+                              on_click=_save_workspace_session, args=(orders_df, orders_source_label or ""))
+            save_error = st.session_state.get("session_save_error")
+            if save_error:
+                st.error(save_error)
+            for warning in feedback.get("warnings", []):
+                st.warning(warning)
             with st.container(key="workflow_metrics"):
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Clientes", clients_global)

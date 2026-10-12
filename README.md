@@ -13,6 +13,11 @@ O fluxo principal é:
 7. gerar etiquetas HTML 10x15 cm para impressão;
 8. guardar sessões para continuar mais tarde.
 
+O botão **Guardar direto** está disponível nas quatro etapas. Guarda também alterações pendentes,
+preferências das mensagens e textos personalizados por cliente. Cada gravação cria uma versão da sessão.
+Para retomar, abre **Sessões guardadas**, pesquisa pelo nome e escolhe a gravação pretendida.
+As datas são apresentadas na hora de Lisboa.
+
 ## Como correr
 
 Use **Python 3.10 ou superior**. Os comandos abaixo usam Python 3.12; se tiver outra versão suportada instalada, ajuste `python3.12`.

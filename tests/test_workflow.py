@@ -349,6 +349,112 @@ class WorkflowTests(unittest.TestCase):
         self.assert_app_ok(reopened)
         self.assertIn("Hora (↑)", reopened.selectbox(key="labels_order").options)
 
+    def test_save_session_includes_unapplied_orders_and_pending_comment_removals(self):
+        app = self.login()
+        self.import_orders(app)
+        self.edit_cells(app, "comments_editor", {0: {"Quantidade": 4.0}, 2: {"Incluir": False}})
+        app.session_state["pending_comment_clear_clients"] = ["Ana Silva"]
+        app.text_input(key="session_label").set_value("Direto com rascunho")
+        self.click(app, "Guardar sessão")
+        saved_rows = sessions_json.list_sessions()
+        self.assertEqual(len(saved_rows), 1)
+        saved = sessions_json.load_session(saved_rows[0]["path"])
+        self.assertEqual(saved["label"], "Direto com rascunho")
+        self.assertEqual(len(saved["orders"]), 2)
+        self.assertEqual(float(saved["orders"][0]["Quantidade"]), 4.0)
+        self.assertEqual([row["Comentario"] for row in saved["orders"]], ["", ""])
+        self.assertEqual(app.session_state["pending_comment_clear_clients"], [])
+        app.button(key="step_Preços").click().run()
+        self.assert_app_ok(app)
+        self.assertEqual(app.session_state["nav_committed"], "Preços")
+        self.assertFalse(any(button.label == "Guardar e continuar" for button in app.button))
+
+    def test_save_session_from_prices_applies_price_draft_and_is_available_in_every_step(self):
+        app = self.login()
+        self.import_orders(app)
+        app.button(key="step_Preços").click().run()
+        self.edit_cells(app, "all_prices_editor", {0: {"Preco": 3.5}, 1: {"Preco": 4.0}})
+        app.text_input(key="session_label").set_value("Preços por guardar")
+        self.click(app, "Guardar sessão")
+        saved = sessions_json.load_session(sessions_json.list_sessions()[0]["path"])
+        self.assertEqual(saved["price_overrides"], PRICES)
+        self.assertEqual(app.session_state["price_overrides"], PRICES)
+        for destination in ("Mensagens", "Etiquetas", "Operação"):
+            app.button(key=f"step_{destination}").click().run()
+            self.assert_app_ok(app)
+            self.assertEqual(app.session_state["nav_committed"], destination)
+            self.assertEqual(app.button(key="save_workspace_session").label, "Guardar sessão")
+
+    def test_saved_session_restores_preferences_and_personalized_message(self):
+        app = self.login()
+        self.import_orders(app)
+        self.save_prices(app)
+        app.session_state["currency"] = "BRL"
+        app.session_state["intro"] = "Olá do direto de domingo"
+        app.session_state["outro"] = "Até à próxima"
+        app.session_state["total_line_template"] = "Valor: {total}"
+        app.button(key="step_Mensagens").click().run()
+        app.checkbox(key="messages_allow_edit").check().run()
+        message = next(area for area in app.text_area if area.label == "Mensagem deste cliente")
+        self.assertIn("R$", message.value)
+        message.set_value("Ana, combinamos a entrega amanhã.").run()
+        self.click(app, "Guardar sessão")
+
+        reopened = self.login()
+        reopened.radio(key="nav_page").set_value("Histórico").run()
+        self.click(reopened, "Abrir")
+        self.assertEqual(reopened.session_state["currency"], "BRL")
+        self.assertEqual(reopened.session_state["intro"], "Olá do direto de domingo")
+        self.assertEqual(reopened.session_state["total_line_template"], "Valor: {total}")
+        self.assertEqual(reopened.session_state["outro"], "Até à próxima")
+        reopened.button(key="step_Mensagens").click().run()
+        reopened.checkbox(key="messages_allow_edit").check().run()
+        self.assert_app_ok(reopened)
+        self.assertEqual(next(area.value for area in reopened.text_area if area.label == "Mensagem deste cliente"),
+                         "Ana, combinamos a entrega amanhã.")
+
+    def test_removing_comments_keeps_other_pending_edits_and_does_not_resurrect_comments(self):
+        app = self.login()
+        self.import_orders(app)
+        self.edit_cells(app, "comments_editor", {0: {"Quantidade": 4.0}})
+        app.selectbox(key="comments_client_pick").set_value("Ana Silva").run()
+        app.button(key="mark_remove_comments_client").click().run()
+        self.assertFalse(app.button(key="apply_remove_comments_list").disabled)
+        app.button(key="apply_remove_comments_list").click().run()
+        self.assert_app_ok(app)
+        self.assertEqual(app.session_state["orders_working"].loc[0, "Quantidade"], 4.0)
+        self.assertEqual(app.session_state["orders_draft"].loc[0, "Quantidade"], 2.0)
+        self.assertEqual(app.session_state["orders_draft"].loc[0, "Comentário"], "")
+        self.assertEqual(app.session_state["orders_working"].loc[0, "Comentário"], "")
+        self.click(app, "Guardar sessão")
+        saved = sessions_json.load_session(sessions_json.list_sessions()[0]["path"])
+        self.assertEqual(saved["orders"][0]["Comentario"], "")
+        self.assertEqual(float(saved["orders"][0]["Quantidade"]), 4.0)
+
+    def test_failed_session_save_shows_error_and_keeps_working_data(self):
+        app = self.login()
+        self.import_orders(app)
+        self.edit_cells(app, "comments_editor", {0: {"Quantidade": 4.0}})
+        blocked_path = Path(self.directory.name) / "not-a-directory"
+        blocked_path.write_text("fixture", encoding="utf-8")
+        with patch.object(sessions_json, "SESSIONS_DIR", str(blocked_path)):
+            app.button(key="save_workspace_session").click().run()
+        self.assertFalse(app.exception)
+        self.assertTrue(any("Não consegui guardar a sessão" in error.value for error in app.error))
+        self.assertEqual(float(app.session_state["orders_working"].loc[0, "Quantidade"]), 4.0)
+        self.assertEqual(sessions_json.list_sessions(), [])
+        self.assertNotIn("session_save_feedback", app.session_state)
+
+    def test_session_save_does_not_create_an_unopenable_empty_snapshot(self):
+        app = self.login()
+        self.import_orders(app)
+        self.edit_cells(app, "comments_editor", {index: {"Incluir": False} for index in range(3)})
+        app.button(key="save_workspace_session").click().run()
+        self.assertFalse(app.exception)
+        self.assertTrue(any("Não há encomendas incluídas" in error.value for error in app.error))
+        self.assertEqual(sessions_json.list_sessions(), [])
+        self.assertEqual(len(app.session_state["orders_working"]), 3)
+
     def test_opening_session_replaces_previous_orders_and_prices_on_any_page(self):
         sessions_json.save_session(
             label="Sessão para recuperar",
