@@ -50,7 +50,7 @@ def build_session_payload(
     orders_clean = apply_aliases(orders_clean, ORDERS_ALIASES)
 
     keep = REQUIRED_ORDERS_COLS.copy()
-    for optional in ["UserId", "ProfileId", "Hora", "Comentario", "Ativo"]:
+    for optional in ["UserId", "ProfileId", "Hora", "Comentario", "Ativo", "Incluir"]:
         if optional in orders_clean.columns:
             keep.append(optional)
     orders_clean = orders_clean[keep].copy()

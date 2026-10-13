@@ -1,25 +1,56 @@
 import html
 from typing import Optional
 
+import pandas as pd
+
 
 def parse_hora_to_seconds(value: object) -> Optional[int]:
-    s = str(value or "").strip().replace(" ", "")
+    if value is None or pd.isna(value):
+        return None
+    s = str(value).strip().replace(" ", "")
     if not s:
         return None
-    parts = [p for p in s.split(":") if p != ""]
+    parts = s.split(":")
+    if not all(part.isdigit() for part in parts):
+        return None
     try:
         if len(parts) == 2:
             minutes = int(parts[0])
             seconds = int(parts[1])
-            return minutes * 60 + seconds
+            return minutes * 60 + seconds if seconds < 60 else None
         if len(parts) == 3:
             hours = int(parts[0])
             minutes = int(parts[1])
             seconds = int(parts[2])
-            return hours * 3600 + minutes * 60 + seconds
+            return hours * 3600 + minutes * 60 + seconds if minutes < 60 and seconds < 60 else None
     except ValueError:
         return None
     return None
+
+
+def aggregate_labels(base: pd.DataFrame) -> pd.DataFrame:
+    """Combine label rows, choosing the first timestamp numerically."""
+    group_columns = ["ClienteKey" if "ClienteKey" in base.columns else "Cliente", "Produto"]
+    aggregations = {
+        "Quantidade": ("Quantidade", "sum"),
+        "Preco": ("Preco", "max"),
+    }
+    for name in ("Cliente", "ClienteNome"):
+        if name in base.columns and name not in group_columns:
+            aggregations[name] = (name, "first")
+    if "Hora" in base.columns:
+        def earliest_hora(values: pd.Series):
+            valid = [
+                (seconds, value)
+                for value in values
+                if (seconds := parse_hora_to_seconds(value)) is not None
+            ]
+            if valid:
+                return min(valid, key=lambda entry: entry[0])[1]
+            return values.iloc[0] if not values.empty else ""
+
+        aggregations["Hora"] = ("Hora", earliest_hora)
+    return base.groupby(group_columns, as_index=False, dropna=False).agg(**aggregations)
 
 
 def build_labels_html(blocks: list[dict]) -> str:

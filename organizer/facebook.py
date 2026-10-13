@@ -8,7 +8,7 @@ def normalize_fb_target(v: str) -> str:
     s = str(v or "").strip()
     # Some CSV/Excel imports turn large numeric IDs into floats like "100023...332.0"
     s = re.sub(r"^(\d{5,})\.0$", r"\1", s)
-    if s.lower() == "nan":
+    if s.lower() in {"nan", "none", "<na>", "nat"}:
         return ""
     return s
 
@@ -47,4 +47,3 @@ def build_facebook_profile_url(user_id: str = "", profile_id: str = "") -> str:
         return f"https://www.facebook.com/{profile_id}"
 
     return ""
-

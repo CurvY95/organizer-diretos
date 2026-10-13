@@ -17,6 +17,8 @@ O botão **Guardar direto** está disponível nas quatro etapas. Guarda também 
 preferências das mensagens e textos personalizados por cliente. Cada gravação cria uma versão da sessão.
 Para retomar, abre **Sessões guardadas**, pesquisa pelo nome e escolhe a gravação pretendida.
 As datas são apresentadas na hora de Lisboa.
+As linhas excluídas ficam guardadas para poderes voltar a incluí-las ao retomar a sessão.
+Clientes com o mesmo nome são separados pelo ID disponível nas mensagens, totais e etiquetas.
 
 ## Como correr
 
@@ -86,6 +88,8 @@ CSV ou Excel com colunas equivalentes a:
 - `Preco`
 
 `Preco` pode vir como `10.5`, `10,5` ou com separadores de milhares comuns.
+Os números também aceitam notação científica, como `1e3`. Quantidades inválidas são assinaladas;
+a opção de assumir uma unidade aplica-se apenas a células vazias.
 
 ## Persistência
 

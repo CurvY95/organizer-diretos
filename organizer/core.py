@@ -1,9 +1,12 @@
 import hashlib
+import math
 import re
 from dataclasses import dataclass
 from typing import Optional
 
 import pandas as pd
+
+from .customers import with_customer_labels
 
 
 @dataclass(frozen=True)
@@ -73,38 +76,64 @@ def _normalize_col_name(c) -> str:
 def coerce_number_series(s: pd.Series) -> pd.Series:
     if s is None:
         return s
-    s2 = s.astype(str).str.strip()
-    s2 = s2.str.replace("\u00a0", " ", regex=False)  # non-breaking space
 
     def normalize_one(x) -> str:
-        if x is None:
-            x = ""
-        try:
-            if isinstance(x, float) and pd.isna(x):
-                x = ""
-        except Exception:
-            pass
-        x = str(x).strip()
-        if x == "":
+        if x is None or pd.isna(x):
             return ""
+        x = str(x).strip().replace("\u00a0", " ")
+        # Currency is permitted only around the number. Stripping arbitrary
+        # characters would turn invalid quantities ("2x") into valid charges.
+        currency = r"(?:R\$|[€$£]|EUR|USD|BRL|GBP)"
+        x = re.sub(rf"^{currency}\s*", "", x, flags=re.IGNORECASE)
+        x = re.sub(rf"\s*{currency}$", "", x, flags=re.IGNORECASE)
         x = x.replace(" ", "")
-        x = re.sub(r"[^\d,.\-+]", "", x)
-        has_dot = "." in x
-        has_comma = "," in x
+        if not re.fullmatch(r"[+-]?(?:\d[\d,.]*|[,.]\d+)(?:[eE][+-]?\d+)?", x):
+            return ""
+        # Keep the exponent separate while normalizing decimal separators.
+        mantissa, *exponent = re.split(r"[eE]", x)
+        has_dot = "." in mantissa
+        has_comma = "," in mantissa
         if has_dot and has_comma:
             # Decide decimal separator by last occurrence.
-            if x.rfind(",") > x.rfind("."):
+            if mantissa.rfind(",") > mantissa.rfind("."):
                 # 1.234,56 -> 1234.56
-                x = x.replace(".", "").replace(",", ".")
+                mantissa = mantissa.replace(".", "").replace(",", ".")
             else:
                 # 1,234.56 -> 1234.56
-                x = x.replace(",", "")
+                mantissa = mantissa.replace(",", "")
         elif has_comma and not has_dot:
-            x = x.replace(",", ".")
-        return x
+            mantissa = mantissa.replace(",", ".")
+        return mantissa + ("e" + exponent[0] if exponent else "")
 
-    s2 = s2.map(normalize_one)
-    return pd.to_numeric(s2, errors="coerce")
+    values = pd.to_numeric(s.map(normalize_one), errors="coerce")
+    return values.where(values.map(math.isfinite))
+
+
+def normalize_quantities(s: pd.Series, *, fill_missing_with=None) -> pd.Series:
+    """Validate quantities, filling only cells that were originally empty."""
+    missing = s.map(lambda value: pd.isna(value) or (isinstance(value, str) and not value.strip()))
+    quantities = coerce_number_series(s)
+    if fill_missing_with is not None:
+        try:
+            replacement = float(fill_missing_with)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Quantidade: o valor para preencher células vazias deve ser um número finito.") from exc
+        if not math.isfinite(replacement):
+            raise ValueError("Quantidade: o valor para preencher células vazias deve ser um número finito.")
+        quantities = quantities.mask(missing, replacement)
+    invalid = quantities.isna()
+    if invalid.any():
+        examples = "; ".join(
+            f"linha {position + 1}: {value!r}"
+            for position, (value, bad) in enumerate(zip(s.tolist(), invalid.tolist()))
+            if bad
+        )
+        raise ValueError(
+            "Encomendas: encontrei valores inválidos em `Quantidade`. "
+            "Usa números finitos; apenas células vazias podem assumir a quantidade padrão. "
+            f"Exemplos: {examples[:1000]}"
+        )
+    return quantities
 
 
 def standardize_df_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -187,28 +216,22 @@ def parse_inputs(
     orders["Cliente"] = orders["Cliente"].astype(str).str.strip()
     orders["Produto"] = orders["Produto"].astype(str).str.strip()
     if "UserId" in orders.columns:
-        orders["UserId"] = orders["UserId"].astype(str).str.strip()
+        orders["UserId"] = orders["UserId"].fillna("").astype(str).str.strip()
     if "ProfileId" in orders.columns:
-        orders["ProfileId"] = orders["ProfileId"].astype(str).str.strip()
+        orders["ProfileId"] = orders["ProfileId"].fillna("").astype(str).str.strip()
     if "Hora" in orders.columns:
         orders["Hora"] = orders["Hora"].astype(str).str.strip()
     if "Comentario" in orders.columns:
         orders["Comentario"] = orders["Comentario"].astype(str)
 
+    orders = with_customer_labels(orders)
+
     prices["Produto"] = prices["Produto"].astype(str).str.strip()
 
-    orders["Quantidade"] = coerce_number_series(orders["Quantidade"])
+    orders["Quantidade"] = normalize_quantities(
+        orders["Quantidade"], fill_missing_with=fill_missing_quantity_with
+    )
     prices["Preco"] = coerce_number_series(prices["Preco"])
-
-    if fill_missing_quantity_with is not None:
-        orders["Quantidade"] = orders["Quantidade"].fillna(float(fill_missing_quantity_with))
-
-    if orders["Quantidade"].isna().any():
-        bad = orders[orders["Quantidade"].isna()][["Cliente", "Produto"]].head(20)
-        raise ValueError(
-            "Encomendas: encontrei valores inválidos em `Quantidade`. "
-            f"Exemplos (até 20):\n{bad.to_string(index=False)}"
-        )
     if prices["Preco"].isna().any():
         bad = prices[prices["Preco"].isna()][["Produto"]].head(20)
         raise ValueError(
@@ -255,13 +278,16 @@ def apply_price_overrides(merged: pd.DataFrame, overrides: pd.DataFrame) -> pd.D
 
 
 def build_summary(merged: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
+    merged = with_customer_labels(merged)
     by_client = (
-        merged.groupby(["Cliente"], dropna=False, as_index=False)
-        .agg(Total=("TotalItem", "sum"))
+        merged.groupby("ClienteKey", dropna=False, as_index=False)
+        .agg(Cliente=("Cliente", "first"), Total=("TotalItem", "sum"))
+        .drop(columns=["ClienteKey"])
         .sort_values(["Cliente"])
     )
     detail_map: dict[str, pd.DataFrame] = {}
-    for client, g in merged.groupby("Cliente", dropna=False):
+    for _, g in merged.groupby("ClienteKey", dropna=False):
+        client = str(g["Cliente"].iloc[0])
         g2 = (
             g.groupby(["Produto"], as_index=False)
             .agg(
@@ -271,6 +297,7 @@ def build_summary(merged: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, pd.Data
             )
             .sort_values(["Produto"])
         )
+        g2.attrs["customer_name"] = str(g["ClienteNome"].iloc[0])
         detail_map[str(client)] = g2
     return by_client, detail_map
 
@@ -297,7 +324,7 @@ def build_message(
     lines: list[str] = []
     if intro.strip():
         lines.append(intro.strip())
-    lines.append(f"{client}:")
+    lines.append(f"{details.attrs.get('customer_name', client)}:")
     for _, row in details.iterrows():
         q = row["Quantidade"]
         p = row["Preco"]
@@ -316,6 +343,8 @@ def build_message(
 
 def stable_orders_fingerprint(orders: pd.DataFrame) -> str:
     cols = ["Cliente", "Produto", "Quantidade"]
+    if "ClienteKey" in orders.columns:
+        cols.append("ClienteKey")
     df = orders[cols].copy()
     df["Cliente"] = df["Cliente"].astype(str).str.strip()
     df["Produto"] = df["Produto"].map(normalize_produto_key)

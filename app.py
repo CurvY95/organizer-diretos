@@ -2,7 +2,6 @@ import base64
 import hashlib
 import html
 import io
-import json
 import logging
 import os
 import re
@@ -12,6 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from organizer import core as oc
+from organizer import customers as ocu
 from organizer import db as odb
 from organizer import editor_views as oev
 from organizer import facebook as ofb
@@ -138,7 +138,6 @@ build_message = oc.build_message
 stable_orders_fingerprint = oc.stable_orders_fingerprint
 
 load_local_state = osl.load_local_state
-save_local_state = osl.save_local_state
 
 FB_PAGE_ID = ofb.FB_PAGE_ID
 _normalize_fb_target = ofb.normalize_fb_target
@@ -244,22 +243,51 @@ def _is_postgres_engine(engine) -> bool:
 def _client_ids_from_orders_df(df: pd.DataFrame) -> dict[str, dict[str, str]]:
     if df is None or df.empty:
         return {}
-    d = df.copy()
+    d = ocu.with_customer_labels(df)
     if "UserId" not in d.columns:
         d["UserId"] = ""
     if "ProfileId" not in d.columns:
         d["ProfileId"] = ""
     out: dict[str, dict[str, str]] = {}
-    for _, r in d.drop_duplicates(subset=["Cliente"]).iterrows():
-        cliente = str(r["Cliente"]).strip()
-        user_id = str(r.get("UserId") or "").strip()
-        profile_id = str(r.get("ProfileId") or "").strip()
-        if user_id.lower() == "nan":
-            user_id = ""
-        if profile_id.lower() == "nan":
-            profile_id = ""
-        out[cliente] = {"user_id": user_id, "profile_id": profile_id}
+    for cliente, rows in d.groupby("Cliente"):
+        def first_id(column):
+            values = rows[column].fillna("").astype(str).map(_normalize_fb_target)
+            return next((value for value in values if value), "")
+        out[str(cliente)] = {"user_id": first_id("UserId"), "profile_id": first_id("ProfileId")}
     return out
+
+
+def _resolved_customer_ids(df: pd.DataFrame, local_state: dict, bulk: dict) -> dict[str, dict[str, str]]:
+    base = _client_ids_from_orders_df(df)
+    keys = ocu.directory_keys(df)
+    legacy = ocu.legacy_names(df)
+    directory = local_state.get("client_ids") or {}
+    for display, ids in base.items():
+        key = keys[display]
+        for layer in (directory, bulk):
+            saved = layer.get(key)
+            if saved is None:
+                saved = layer.get(legacy.get(display, "")) or {}
+                if any(ids[field] and saved.get(field)
+                       and _normalize_fb_target(ids[field]).casefold() != _normalize_fb_target(saved[field]).casefold()
+                       for field in ("user_id", "profile_id")):
+                    saved = {}
+            for field in ("user_id", "profile_id"):
+                if not ids[field] and saved.get(field):
+                    ids[field] = str(saved[field]).strip()
+        # Identity-specific cloud entries may contain explicit corrections.
+        for field, value in (bulk.get(key) or {}).items():
+            if field in ids and value:
+                ids[field] = str(value).strip()
+    overrides = {**(local_state.get("client_id_overrides") or {}),
+                 **(st.session_state.get("customer_id_overrides") or {})}
+    current = st.session_state.setdefault("customer_id_overrides", {})
+    for display, key in keys.items():
+        if key in overrides:
+            base[display] = {field: str(overrides[key].get(field) or "").strip()
+                             for field in ("user_id", "profile_id")}
+            current[key] = base[display].copy()
+    return base
 
 
 def _merge_ids_fill_missing(
@@ -430,19 +458,25 @@ def _finish_navigation(save: bool) -> None:
     _cancel_navigation()
 
 
-def _reset_order_workspace() -> None:
+def _reset_editor_workspace() -> None:
+    """Discard state tied to the selected orders source, including its prices."""
     for key in (
-        "orders_draft", "orders_draft_source", "orders_working", "orders_working_source",
+        "orders_draft", "orders_draft_source", "orders_working", "orders_working_source", "workspace_source",
         "orders_editor_base", "price_editor_base",
         "price_draft", "price_draft_products", "comments_editor", "all_prices_editor",
         "labels_editor", "prices_upload_file", "prices_upload_sheet_pick", "price_overrides",
         "pending_comment_clear_clients", "excel_prices_map", "prices_last_saved_at",
-        "history_session_id", "_ids_bulk_fp", "_ids_bulk_map", "uploaded_input_cache",
-        "loaded_session", "session_label",
-        "message_manual_drafts",
+        "history_session_id", "_ids_bulk_fp", "_ids_bulk_map",
+        "message_manual_drafts", "customer_id_overrides",
         "session_save_feedback", "session_save_error",
         "orders_search", "orders_scope", "prices_search", "prices_missing_only",
     ):
+        st.session_state.pop(key, None)
+
+
+def _reset_order_workspace() -> None:
+    _reset_editor_workspace()
+    for key in ("uploaded_input_cache", "loaded_session", "session_label"):
         st.session_state.pop(key, None)
 
 
@@ -464,6 +498,8 @@ def _activate_session(data: dict) -> None:
         st.session_state["fill_missing_qty"] = preferences["fill_missing_qty"]
     if isinstance(meta.get("message_manual_drafts"), dict):
         st.session_state["message_manual_drafts"] = meta["message_manual_drafts"]
+    if isinstance(meta.get("customer_id_overrides"), dict):
+        st.session_state["customer_id_overrides"] = meta["customer_id_overrides"]
     st.session_state["open_session_navigation"] = True
 
 
@@ -480,7 +516,8 @@ def _apply_pending_comment_removals_to_df(df: pd.DataFrame) -> pd.DataFrame:
     col_comment = "Comentário" if "Comentário" in out.columns else ("Comentario" if "Comentario" in out.columns else "")
     if not col_comment:
         return out
-    mask = out["Cliente"].astype(str).isin(list(pending))
+    customers = ocu.with_customer_labels(out)
+    mask = customers["ClienteKey"].isin(pending) | customers["Cliente"].isin(pending)
     out.loc[mask, col_comment] = ""
     return out
 
@@ -490,6 +527,10 @@ def _save_all_pending_changes() -> None:
     if "orders_working" in st.session_state and isinstance(st.session_state.get("orders_working"), pd.DataFrame):
         w = st.session_state["orders_working"].copy()
         w = _apply_pending_comment_removals_to_df(w)
+        w["Quantidade"] = oc.normalize_quantities(
+            w["Quantidade"],
+            fill_missing_with=1.0 if st.session_state.get("fill_missing_qty", True) else None,
+        )
         st.session_state["orders_working"] = w
         st.session_state["orders_draft"] = w.copy()
     st.session_state["pending_comment_clear_clients"] = []
@@ -517,6 +558,12 @@ def _save_all_pending_changes() -> None:
 def _commit_orders_editor() -> None:
     working = st.session_state.get("orders_working")
     if isinstance(working, pd.DataFrame):
+        working = working.copy()
+        working["Quantidade"] = oc.normalize_quantities(
+            working["Quantidade"],
+            fill_missing_with=1.0 if st.session_state.get("fill_missing_qty", True) else None,
+        )
+        st.session_state["orders_working"] = working.copy()
         st.session_state["orders_draft"] = working.copy()
         st.session_state["orders_editor_base"] = working.copy()
     st.session_state.pop("comments_editor", None)
@@ -614,7 +661,7 @@ def _discard_all_pending_changes() -> None:
     st.session_state["pending_comment_clear_clients"] = []
 
 
-def _build_orders_for_calc_from_state(*, orders_df: pd.DataFrame) -> pd.DataFrame:
+def _build_orders_for_calc_from_state(*, orders_df: pd.DataFrame, include_excluded: bool = False) -> pd.DataFrame:
     """
     Build the canonical `orders_for_calc` DataFrame for calculations, regardless of which page is open.
     Prefers committed draft in session_state (after user clicks 'Aplicar alterações').
@@ -630,7 +677,7 @@ def _build_orders_for_calc_from_state(*, orders_df: pd.DataFrame) -> pd.DataFram
                 "Comentário": "Comentario",
             }
         ).copy()
-        if "Incluir" in out.columns:
+        if "Incluir" in out.columns and not include_excluded:
             out = out[out["Incluir"].fillna(True)].copy()
             out = out.drop(columns=["Incluir"], errors="ignore")
         return out
@@ -639,6 +686,8 @@ def _build_orders_for_calc_from_state(*, orders_df: pd.DataFrame) -> pd.DataFram
     base = _standardize_df_columns(orders_df)
     base = _apply_aliases(base, ORDERS_ALIASES)
     _validate_required_cols(base, REQUIRED_ORDERS_COLS, "Encomendas (Comments)")
+    if "Incluir" in base.columns and not include_excluded:
+        base = base[base["Incluir"].fillna(True)].drop(columns=["Incluir"])
     return base.copy()
 
 
@@ -646,8 +695,9 @@ def _save_workspace_session(orders_df: pd.DataFrame, source: str) -> None:
     st.session_state.pop("session_save_error", None)
     try:
         _save_all_pending_changes()
-        orders = _build_orders_for_calc_from_state(orders_df=orders_df)
-        if orders.empty:
+        orders = _build_orders_for_calc_from_state(orders_df=orders_df, include_excluded=True)
+        included_orders = _build_orders_for_calc_from_state(orders_df=orders_df)
+        if included_orders.empty:
             st.session_state["session_save_error"] = "Não há encomendas incluídas para guardar. Inclui pelo menos uma linha na tabela."
             return
         label = str(st.session_state.get("session_label") or "").strip()
@@ -662,7 +712,8 @@ def _save_workspace_session(orders_df: pd.DataFrame, source: str) -> None:
             orders_for_calc=orders,
             price_overrides=st.session_state.get("price_overrides") or {},
             meta={"source": source, "preferences": preferences,
-                  "message_manual_drafts": st.session_state.get("message_manual_drafts") or {}},
+                  "message_manual_drafts": st.session_state.get("message_manual_drafts") or {},
+                  "customer_id_overrides": st.session_state.get("customer_id_overrides") or {}},
         )
     except Exception:
         logger.exception("Não foi possível guardar a sessão.")
@@ -678,15 +729,17 @@ def _save_workspace_session(orders_df: pd.DataFrame, source: str) -> None:
         warnings.append("A sessão ficou guardada neste dispositivo, mas não consegui sincronizar a cópia na base de dados.")
     try:
         local_state = load_local_state(STATE_PATH)
-        local_ids = local_state.get("client_ids") or {}
-        if not isinstance(local_ids, dict):
-            local_ids = {}
-        base_ids = _client_ids_from_orders_df(orders)
-        bulk = odb.get_customer_ids_bulk(_db_engine(), clientes=list(base_ids))
-        merged_ids = _merge_ids_fill_missing(base_ids, local_ids, bulk)
-        local_state["client_ids"] = {**local_ids, **merged_ids}
-        save_local_state(STATE_PATH, local_state)
-        rows = [(name, ids.get("user_id", ""), ids.get("profile_id", "")) for name, ids in merged_ids.items()
+        directory_keys = ocu.directory_keys(orders)
+        lookup = sorted(set(directory_keys.values()) | set(ocu.legacy_names(orders).values()))
+        bulk = odb.get_customer_ids_bulk(_db_engine(), clientes=lookup)
+        merged_ids = {}
+        def save_customer_directory(current):
+            merged_ids.update(_resolved_customer_ids(orders, current, bulk))
+            current.setdefault("client_ids", {}).update({directory_keys[name]: ids for name, ids in merged_ids.items()})
+            current.setdefault("client_id_overrides", {}).update(st.session_state.get("customer_id_overrides") or {})
+            return current
+        osl.update_local_state(STATE_PATH, save_customer_directory)
+        rows = [(directory_keys[name], ids.get("user_id", ""), ids.get("profile_id", "")) for name, ids in merged_ids.items()
                 if ids.get("user_id") or ids.get("profile_id")]
         if rows:
             odb.upsert_customer_ids_bulk(_db_engine(), rows=rows)
@@ -1633,7 +1686,7 @@ else:
         orders_df = pd.DataFrame(loaded["orders"])
         prices_df = pd.DataFrame(columns=["Produto", "Preco"])
         orders_source_label = f"Sessão: {loaded.get('label') or loaded.get('id')}"
-        if "price_overrides" not in st.session_state or not st.session_state.get("price_overrides"):
+        if "price_overrides" not in st.session_state:
             st.session_state["price_overrides"] = loaded.get("price_overrides") or {}
     else:
         st.session_state.setdefault("uploaded_input_cache", None)
@@ -1754,6 +1807,11 @@ else:
 
 if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is not None and prices_df is not None:
     try:
+        previous_source = st.session_state.get("workspace_source", st.session_state.get("orders_draft_source"))
+        if previous_source is not None and previous_source != (orders_source_label or ""):
+            _reset_editor_workspace()
+        st.session_state["workspace_source"] = orders_source_label or ""
+
         tab_comments = None
         tab_upload = None
         tab_prices = None
@@ -1795,7 +1853,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     orders_view = _apply_aliases(orders_view, ORDERS_ALIASES)
                     _validate_required_cols(orders_view, REQUIRED_ORDERS_COLS, "Encomendas (Comments)")
 
-                cols = ["Cliente"]
+                orders_view = ocu.with_customer_labels(orders_view)
+                cols = ["Cliente", "ClienteKey"]
                 if "UserId" in orders_view.columns:
                     cols.append("UserId")
                 if "ProfileId" in orders_view.columns:
@@ -1831,13 +1890,14 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     combined = "\n\n---\n\n".join(dict.fromkeys(raw_comments)).strip()
 
                     st.text_area("Comentário(s)", value=combined or "—", height=200, disabled=True, key="comments_text")
-                    st.dataframe(vc, width="stretch")
+                    st.dataframe(vc.drop(columns=["ClienteKey"]), width="stretch")
 
                     # Batch mode: mark many clients, apply once
                     st.session_state.setdefault("pending_comment_clear_clients", [])
                     pending = set([str(x) for x in (st.session_state.get("pending_comment_clear_clients") or [])])
+                    comment_client_key = str(vc["ClienteKey"].iloc[0]) if not vc.empty else ""
                     if client_c:
-                        pending_hint = " (já marcado)" if str(client_c) in pending else ""
+                        pending_hint = " (já marcado)" if comment_client_key in pending else ""
                     else:
                         pending_hint = ""
 
@@ -1847,8 +1907,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                             f"Marcar para remover{pending_hint}",
                             type="secondary",
                             key="mark_remove_comments_client",
-                            disabled=not bool(client_c) or str(client_c) in pending,
-                            on_click=_mark_comment_removal, args=(client_c,),
+                            disabled=not bool(client_c) or comment_client_key in pending,
+                            on_click=_mark_comment_removal, args=(comment_client_key,),
                         )
                     with cbtn2:
                         clear_pending = st.button(
@@ -1894,6 +1954,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                 if "Comentario" in orders_edit.columns:
                     ui_cols.append("Comentario")
                 ui_cols += ["Produto", "Quantidade"]
+                if "Incluir" in orders_edit.columns:
+                    ui_cols.append("Incluir")
 
                 orders_edit = orders_edit[ui_cols].copy()
                 orders_edit = orders_edit.rename(
@@ -1920,9 +1982,9 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     st.session_state["orders_draft"] = orders_edit.copy()
                 # Committed vs working edits (SaaS-style: apply at the end)
                 committed = st.session_state["orders_draft"].copy()
-                committed["Quantidade"] = _coerce_number_series(committed["Quantidade"])
-                if fill_missing_qty:
-                    committed["Quantidade"] = committed["Quantidade"].fillna(1.0)
+                committed["Quantidade"] = oc.normalize_quantities(
+                    committed["Quantidade"], fill_missing_with=1.0 if fill_missing_qty else None,
+                )
                 st.session_state["orders_draft"] = committed.copy()
 
                 if "orders_working" not in st.session_state or st.session_state.get("orders_working_source") != (
@@ -2055,7 +2117,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
         if st.session_state.get("_ids_bulk_fp") != parsed_orders_fp:
             st.session_state["_ids_bulk_fp"] = parsed_orders_fp
             try:
-                client_names_bulk = parsed.orders["Cliente"].dropna().astype(str).str.strip().unique().tolist()
+                client_names_bulk = sorted(set(ocu.directory_keys(parsed.orders).values())
+                                           | set(ocu.legacy_names(parsed.orders).values()))
                 st.session_state["_ids_bulk_map"] = odb.get_customer_ids_bulk(eng_ids, clientes=list(client_names_bulk))
             except Exception as e:
                 logger.warning("Não foi possível carregar IDs em lote da base de dados.", exc_info=True)
@@ -2067,7 +2130,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
         # Full price table for all references present in orders
         price_table = (
             parsed.orders[["ProdutoKey", "Produto"]]
-            .drop_duplicates()
+            .drop_duplicates(subset=["ProdutoKey"])
             .sort_values(["ProdutoKey"])
             .reset_index(drop=True)
         )
@@ -2356,6 +2419,12 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
             [{"ProdutoKey": k, "Preco": v} for k, v in st.session_state["price_overrides"].items()]
         )
         merged = apply_price_overrides(parsed.merged, overrides_df)
+        summary = merged.dropna(subset=["Preco"]).groupby("ClienteKey", as_index=False).agg(
+            Cliente=("Cliente", "first"),
+            Total=("TotalItem", "sum"),
+            QuantidadeTotal=("Quantidade", "sum"),
+            ItensDiferentes=("ProdutoKey", "nunique"),
+        ).drop(columns=["ClienteKey"]).sort_values("Cliente")
 
         priced_rows_global = int(merged["Preco"].notna().sum()) if "Preco" in merged.columns else 0
         total_rows_global = int(merged.shape[0]) if merged is not None else 0
@@ -2413,79 +2482,24 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                              hide_index=True, width="stretch")
 
         by_client, details = build_summary(merged.dropna(subset=["Preco"]))
-        file_ids_map: dict[str, dict[str, str]] = {}
-
-        tmp_cols = ["Cliente"]
-        if "UserId" in parsed.orders.columns:
-            tmp_cols.append("UserId")
-        if "ProfileId" in parsed.orders.columns:
-            tmp_cols.append("ProfileId")
-
-        tmp = parsed.orders[tmp_cols].copy()
-        tmp["Cliente"] = tmp["Cliente"].astype(str)
-
-        if "UserId" in tmp.columns:
-            tmp["UserId"] = tmp["UserId"].astype(str).str.strip()
-        else:
-            tmp["UserId"] = ""
-
-        if "ProfileId" in tmp.columns:
-            tmp["ProfileId"] = tmp["ProfileId"].astype(str).str.strip()
-        else:
-            tmp["ProfileId"] = ""
-
-        for _, r in tmp.drop_duplicates(subset=["Cliente"]).iterrows():
-            cliente = str(r["Cliente"]).strip()
-            user_id = str(r["UserId"]).strip()
-            profile_id = str(r["ProfileId"]).strip()
-
-            if user_id.lower() == "nan":
-                user_id = ""
-            if profile_id.lower() == "nan":
-                profile_id = ""
-
-            file_ids_map[cliente] = {
-                "user_id": user_id,
-                "profile_id": profile_id,
-            }
-
-        local_dir_ids = local.get("client_ids") or {}
-        if not isinstance(local_dir_ids, dict):
-            local_dir_ids = {}
+        file_ids_map = _client_ids_from_orders_df(parsed.orders)
+        customer_directory_keys = ocu.directory_keys(parsed.orders)
         _bulk_ids_layer = st.session_state.get("_ids_bulk_map") or {}
-        client_ids_map = _merge_ids_fill_missing(file_ids_map, local_dir_ids, _bulk_ids_layer)
+        client_ids_map = _resolved_customer_ids(parsed.orders, local, _bulk_ids_layer)
 
         # Aprende IDs novos do ficheiro → `organizer_state.json` (SQLite/local). Com Postgres não gravamos a cada rerun.
         try:
-            local_dir = dict(local_dir_ids)
-            dir_changed = False
-            for nome, ids in file_ids_map.items():
-                key = str(nome).strip()
-                saved = local_dir.get(key) or {}
-                if not isinstance(saved, dict):
-                    saved = {}
+            def learn_customer_ids(current):
+                directory = current.setdefault("client_ids", {})
+                for display, ids in file_ids_map.items():
+                    saved = directory.setdefault(customer_directory_keys[display], {})
+                    for field in ("user_id", "profile_id"):
+                        if not saved.get(field) and ids.get(field):
+                            saved[field] = ids[field]
+                return current
 
-                new_user = str(ids.get("user_id") or "").strip()
-                new_profile = str(ids.get("profile_id") or "").strip()
-                prev_user = str(saved.get("user_id") or "").strip()
-                prev_profile = str(saved.get("profile_id") or "").strip()
-
-                updated = False
-                out_user = prev_user
-                out_profile = prev_profile
-                if new_user and new_user != prev_user:
-                    out_user = new_user
-                    updated = True
-                if new_profile and new_profile != prev_profile:
-                    out_profile = new_profile
-                    updated = True
-                if updated:
-                    local_dir[key] = {"user_id": out_user, "profile_id": out_profile}
-                    dir_changed = True
-
-            if dir_changed and not _is_postgres_engine(eng_ids):
-                local["client_ids"] = local_dir
-                save_local_state(STATE_PATH, local)
+            if not _is_postgres_engine(eng_ids):
+                osl.update_local_state(STATE_PATH, learn_customer_ids)
         except Exception:
             logger.warning("Não foi possível aprender IDs locais a partir do ficheiro.", exc_info=True)
 
@@ -2500,13 +2514,6 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         f"Sem linhas com preço aplicado ainda. "
                         f"(Linhas: {total_rows} · Com preço: {priced_rows} · Preços guardados: {saved_prices})"
                     )
-                summary = merged.dropna(subset=["Preco"]).groupby("Cliente", as_index=False).agg(
-                    Total=("TotalItem", "sum"),
-                    QuantidadeTotal=("Quantidade", "sum"),
-                    ItensDiferentes=("ProdutoKey", "nunique"),
-                )
-                summary = summary.sort_values(["Cliente"])
-
                 total_geral = float(summary["Total"].sum()) if not summary.empty else 0.0
                 c1, c2, c3 = st.columns(3)
                 c1.metric("Clientes", int(summary.shape[0]))
@@ -2571,7 +2578,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
       const status = document.getElementById("copystatus_{btn_key_base}");
       if (!btn || btn.dataset.bound === "1") return;
       btn.dataset.bound = "1";
-      const text = {json.dumps(client_msg)};
+      const text = {ou.script_json(client_msg)};
       btn.addEventListener("click", async () => {{
         try {{
           await navigator.clipboard.writeText(text);
@@ -2637,8 +2644,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
       const status = document.getElementById("copyopenstatus_{btn_key_base}");
       if (!btn || btn.dataset.bound === "1") return;
       btn.dataset.bound = "1";
-      const text = {json.dumps(client_msg)};
-      const url = {json.dumps(chat_or_inbox_url)};
+      const text = {ou.script_json(client_msg)};
+      const url = {ou.script_json(chat_or_inbox_url)};
       btn.addEventListener("click", async () => {{
         try {{
           await navigator.clipboard.writeText(text);
@@ -2803,7 +2810,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
   const status = document.getElementById("copystatus_msgtab_{msg_btn_key_base}");
   if (!btn || btn.dataset.bound === "1") return;
   btn.dataset.bound = "1";
-  const text = {json.dumps(msg_to_copy)};
+  const text = {ou.script_json(msg_to_copy)};
   btn.addEventListener("click", async () => {{
     try {{
       await navigator.clipboard.writeText(text);
@@ -2869,8 +2876,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
   const status = document.getElementById("copyopenstatus_msgtab_{msg_btn_key_base}");
   if (!btn || btn.dataset.bound === "1") return;
   btn.dataset.bound = "1";
-  const text = {json.dumps(msg_to_copy)};
-  const url = {json.dumps(chat_or_inbox_url)};
+  const text = {ou.script_json(msg_to_copy)};
+  const url = {ou.script_json(chat_or_inbox_url)};
   btn.addEventListener("click", async () => {{
     try {{
       await navigator.clipboard.writeText(text);
@@ -2910,18 +2917,23 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                     nu = _normalize_fb_target(c_user)
                     np = _normalize_fb_target(c_profile)
                     client_ids_map[client_selected] = {"user_id": nu, "profile_id": np}
+                    directory_key = customer_directory_keys[client_selected]
+                    corrected = {"user_id": nu, "profile_id": np}
+                    st.session_state.setdefault("customer_id_overrides", {})[directory_key] = corrected
+                    st.session_state.setdefault("_ids_bulk_map", {})[directory_key] = corrected
                     try:
-                        local2 = load_local_state(STATE_PATH)
-                        local2.setdefault("client_ids", {})
-                        local2["client_ids"][str(client_selected).strip()] = {"user_id": nu, "profile_id": np}
-                        save_local_state(STATE_PATH, local2)
+                        def save_customer_correction(current):
+                            current.setdefault("client_ids", {})[directory_key] = corrected
+                            current.setdefault("client_id_overrides", {})[directory_key] = corrected
+                            return current
+                        osl.update_local_state(STATE_PATH, save_customer_correction)
                     except Exception as e:
                         logger.warning("Não foi possível guardar IDs no estado local.", exc_info=True)
                         st.warning(f"Não gravei os IDs no ficheiro local: {e}")
                     try:
                         odb.upsert_customer_ids(
                             _db_engine(),
-                            cliente=str(client_selected).strip(),
+                            cliente=directory_key,
                             user_id=nu,
                             profile_id=np,
                         )
@@ -2967,16 +2979,7 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
                         f"(Com preço: {priced_rows} · Preços guardados: {saved_prices})"
                     )
                 # `Hora` é timestamp do vídeo (m:ss ou h:mm:ss). Usamos para ordenar, não imprime.
-                has_hora = "Hora" in base.columns
-                agg_spec = {"Quantidade": ("Quantidade", "sum"), "Preco": ("Preco", "max")}
-                if has_hora:
-                    agg_spec["Hora"] = ("Hora", "min")
-
-                labels_df = (
-                    base.groupby(["Cliente", "Produto"], as_index=False)
-                    .agg(**{k: v for k, v in agg_spec.items()})
-                    .rename(columns={"Produto": "Referência"})
-                )
+                labels_df = ol.aggregate_labels(base).rename(columns={"Produto": "Referência"})
                 labels_df["Imprimir"] = True
 
                 mode = st.radio(
@@ -3023,6 +3026,8 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
                 # Ensure table shows Hora/Ordem when available
                 col_cfg = {
+                    "ClienteKey": None,
+                    "ClienteNome": None,
                     "Imprimir": st.column_config.CheckboxColumn("Imprimir"),
                     "Cliente": st.column_config.TextColumn("Cliente", disabled=True),
                     "Referência": st.column_config.TextColumn("Referência", disabled=True),
@@ -3082,14 +3087,14 @@ if nav in ("Operação", "Preços", "Mensagens", "Etiquetas") and orders_df is n
 
         # Auto-save locally (outputs) so closing browser doesn't lose work.
         # Não guardamos preços aqui para evitar reutilização entre diretos.
-        local = load_local_state(STATE_PATH)
-        local.setdefault("by_orders_fp", {})
-        local["by_orders_fp"][parsed_orders_fp] = {
-            "final_text": final_text if "final_text" in locals() else "",
-            "totals_csv": (summary.to_csv(index=False) if "summary" in locals() else ""),
-            "last_updated": pd.Timestamp.utcnow().isoformat(),
-        }
-        save_local_state(STATE_PATH, local)
+        output_update = {"totals_csv": summary.to_csv(index=False),
+                         "last_updated": pd.Timestamp.utcnow().isoformat()}
+        if tab_messages is not None:
+            output_update["final_text"] = final_text
+        def save_outputs(current):
+            current.setdefault("by_orders_fp", {}).setdefault(parsed_orders_fp, {}).update(output_update)
+            return current
+        osl.update_local_state(STATE_PATH, save_outputs)
         st.caption("Resultados atualizados neste dispositivo.")
 
         # Downloads / export: show on relevant pages only
